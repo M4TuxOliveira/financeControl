@@ -132,11 +132,15 @@ wait_for web "${PGIDS[-1]}" 60 vite_ready
 
 echo "✔ Stack is up: frontend http://localhost:5173 · API http://localhost:3000/v1 · Ctrl-C to stop"
 
-# Exit (and stop the rest) as soon as any process dies.
+# Exit (and stop the rest) as soon as any process dies. Any child exiting before the user stops the stack is a failure,
+# even with status 0, so the script always exits non-zero here (Ctrl-C/TERM exit via the traps above: 130/143).
 set +e
 wait -n "${PGIDS[@]}"
-code=$?
+status=$?
 for idx in "${!PGIDS[@]}"; do
-  if ! kill -0 "${PGIDS[$idx]}" 2> /dev/null; then echo "✖ ${NAMES[$idx]} stopped (exit $code); see $LOG_DIR/${NAMES[$idx]}.log" >&2; fi
+  if ! kill -0 "${PGIDS[$idx]}" 2> /dev/null; then
+    echo "✖ ${NAMES[$idx]} exited unexpectedly (status $status); see $LOG_DIR/${NAMES[$idx]}.log" >&2
+  fi
 done
-exit "$code"
+[ "$status" -eq 0 ] && status=1
+exit "$status"
