@@ -111,6 +111,54 @@ describe('Cards', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Salvar alterações' }));
     expect(api.updateCard).toHaveBeenCalledWith('k1', expect.objectContaining({ limit: 0 }));
   });
+  it.each(['', '0', '32', 'abc', '1.5', '-3'])('rejects invalid closing day %j with no API call', async bad => {
+    renderWithProviders(<Cards />);
+    await userEvent.click(await screen.findByRole('button', { name: /Novo cartão/ }));
+    await userEvent.type(screen.getByLabelText('Nome do cartão'), 'X');
+    const d = screen.getByLabelText('Dia de fechamento');
+    await userEvent.clear(d);
+    if (bad) await userEvent.type(d, bad);
+    await userEvent.click(screen.getByRole('button', { name: 'Criar cartão' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Informe um dia de 1 a 31.');
+    expect(api.createCard).not.toHaveBeenCalled();
+  });
+  it('rejects an invalid due day with no API call', async () => {
+    renderWithProviders(<Cards />);
+    await userEvent.click(await screen.findByRole('button', { name: /Novo cartão/ }));
+    await userEvent.type(screen.getByLabelText('Nome do cartão'), 'X');
+    const d = screen.getByLabelText('Dia de vencimento');
+    await userEvent.clear(d);
+    await userEvent.type(d, '32');
+    await userEvent.click(screen.getByRole('button', { name: 'Criar cartão' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Informe um dia de 1 a 31.');
+    expect(api.createCard).not.toHaveBeenCalled();
+  });
+  it.each(['1', '31', '20'])('accepts closing day %s', async ok => {
+    vi.mocked(api.createCard).mockResolvedValue(card());
+    renderWithProviders(<Cards />);
+    await userEvent.click(await screen.findByRole('button', { name: /Novo cartão/ }));
+    await userEvent.type(screen.getByLabelText('Nome do cartão'), 'X');
+    const d = screen.getByLabelText('Dia de fechamento');
+    await userEvent.clear(d);
+    await userEvent.type(d, ok);
+    await userEvent.click(screen.getByRole('button', { name: 'Criar cartão' }));
+    expect(api.createCard).toHaveBeenCalledWith(expect.objectContaining({ closeDay: +ok }));
+  });
+  it('pay modal opened before accounts load preselects the first account and submits it', async () => {
+    mockApi({ listCards: [card({ payAccountId: '' })] });
+    let release!: (v: unknown) => void;
+    vi.mocked(api.listAccounts).mockReturnValue(new Promise(r => { release = r; }) as never);
+    vi.mocked(api.payCard).mockResolvedValue(tx());
+    renderWithProviders(<Cards />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Pagar fatura' }));
+    const dlg = screen.getByRole('dialog');
+    release([account({ id: 'z', name: 'Old', archived: true }), account({ id: 'a2', name: 'Caixinha' })]);
+    await within(dlg).findByRole('option', { name: 'Caixinha' });
+    expect(within(dlg).queryByRole('option', { name: 'Old' })).not.toBeInTheDocument();
+    expect(within(dlg).getByLabelText('Da conta')).toHaveValue('a2');
+    await userEvent.click(within(dlg).getByRole('button', { name: 'Confirmar pagamento' }));
+    expect(api.payCard).toHaveBeenCalledWith('k1', expect.objectContaining({ fromAccountId: 'a2' }));
+  });
   it('empty state', async () => {
     mockApi();
     renderWithProviders(<Cards />);

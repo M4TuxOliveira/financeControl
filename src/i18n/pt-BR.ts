@@ -206,5 +206,6 @@ export const ptBR: Record<Key, string> = {
   'cards.payConfirm': 'Confirmar pagamento',
   'cards.payNeedAccount': 'Adicione uma conta primeiro para pagar.',
   'cards.amountRequired': 'Informe um valor.',
+  'cards.dayInvalid': 'Informe um dia de 1 a 31.',
   // @@keys-end
 };

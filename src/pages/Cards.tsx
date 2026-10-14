@@ -100,7 +100,7 @@ export function Cards() {
       </QueryState>
 
       {form && <CardForm card={form === 'new' ? null : form} onClose={() => setForm(null)} onSaved={id => { setSel(id); setCycle(''); }} />}
-      {del && <DeleteCard card={del} onClose={() => setDel(null)} onDone={() => setSel('')} />}
+      {del && <DeleteCard card={del} onClose={() => setDel(null)} onDone={() => { setSel(''); setCycle(''); }} />}
       {pay && <PayModal card={pay.card} st={pay.st} onClose={() => setPay(null)} />}
     </>
   );
@@ -120,11 +120,13 @@ function CardForm({ card, onClose, onSaved }: { card: Card | null; onClose: () =
   const [color, setColor] = useState(card?.color ?? PALETTE[0][1]);
   const [err, setErr] = useState('');
   const [limitErr, setLimitErr] = useState('');
-  // days are kept as text while typing and clamped to 1..31 only on save
-  const day = (v: string) => Math.min(31, Math.max(1, parseInt(v, 10) || 1));
+  const [closeErr, setCloseErr] = useState('');
+  const [dueErr, setDueErr] = useState('');
+  // days are kept as text while typing; validated strictly (integer 1..31) on save
+  const dayOf = (v: string): number | null => (/^\d{1,2}$/.test(v.trim()) && +v >= 1 && +v <= 31 ? +v : null);
 
   const save = async () => {
-    setErr(''); setLimitErr('');
+    setErr(''); setLimitErr(''); setCloseErr(''); setDueErr('');
     if (!name.trim()) return setErr(t('cards.nameRequired'));
     const text = limit.trim();
     let cents = 0;
@@ -133,7 +135,14 @@ function CardForm({ card, onClose, onSaved }: { card: Card | null; onClose: () =
       if (parsed === null) return setLimitErr(t('common.invalidAmount'));
       cents = parsed;
     }
-    const body = { name: name.trim(), network, limit: cents, closeDay: day(closeDay), dueDay: day(dueDay), color, payAccountId };
+    const close = dayOf(closeDay);
+    const due = dayOf(dueDay);
+    if (close === null || due === null) {
+      if (close === null) setCloseErr(t('cards.dayInvalid'));
+      if (due === null) setDueErr(t('cards.dayInvalid'));
+      return;
+    }
+    const body = { name: name.trim(), network, limit: cents, closeDay: close, dueDay: due, color, payAccountId };
     try {
       const saved = card ? await update.mutateAsync({ id: card.id, body }) : await create.mutateAsync(body);
       onSaved(saved?.id ?? card?.id ?? '');
@@ -151,8 +160,8 @@ function CardForm({ card, onClose, onSaved }: { card: Card | null; onClose: () =
           <select id={id} value={payAccountId} onChange={e => setPayAccountId(e.target.value)}>
             <option value="">{t('common.none')}</option>{(accounts.data ?? []).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
           </select>)}</Field>
-        <Field label={t('cards.closeDay')}>{id => <input id={id} type="number" min={1} max={31} value={closeDay} onChange={e => setCloseDay(e.target.value)} />}</Field>
-        <Field label={t('cards.dueDay')}>{id => <input id={id} type="number" min={1} max={31} value={dueDay} onChange={e => setDueDay(e.target.value)} />}</Field>
+        <Field label={t('cards.closeDay')} error={closeErr}>{id => <input id={id} inputMode="numeric" value={closeDay} onChange={e => setCloseDay(e.target.value)} />}</Field>
+        <Field label={t('cards.dueDay')} error={dueErr}>{id => <input id={id} inputMode="numeric" value={dueDay} onChange={e => setDueDay(e.target.value)} />}</Field>
       </div>
       <div className="fld"><span className="lbl">{t('common.color')}</span><Swatches value={color} onChange={setColor} /></div>
       <div className="footer">
@@ -176,9 +185,10 @@ function PayModal({ card, st, onClose }: { card: Card; st: Statement; onClose: (
   const { t, month, today, parseMoney, moneyInput } = useI18n();
   const accounts = useAccounts();
   const pay = usePayCard();
-  const list = accounts.data ?? [];
+  const list = (accounts.data ?? []).filter(a => !a.archived);
   const [amt, setAmt] = useState(moneyInput(st.total - st.paid));
-  const [from, setFrom] = useState(card.payAccountId || list[0]?.id || '');
+  const [from, setFrom] = useState('');
+  const effectiveFrom = from || card.payAccountId || list[0]?.id || '';
   const [dt, setDt] = useState(today);
   const [err, setErr] = useState('');
 
@@ -186,14 +196,14 @@ function PayModal({ card, st, onClose }: { card: Card; st: Statement; onClose: (
     const amount = parseMoney(amt);
     if (amt.trim() && amount === null) return setErr(t('common.invalidAmount'));
     if (!amount) return setErr(t('cards.amountRequired'));
-    if (!from) return setErr(t('cards.payNeedAccount'));
-    try { await pay.mutateAsync({ id: card.id, body: { amount, fromAccountId: from, date: dt } }); onClose(); } catch (e) { setErr(errorMessage(e, t)); }
+    if (!effectiveFrom) return setErr(t('cards.payNeedAccount'));
+    try { await pay.mutateAsync({ id: card.id, body: { amount, fromAccountId: effectiveFrom, date: dt } }); onClose(); } catch (e) { setErr(errorMessage(e, t)); }
   };
   return (
     <Modal title={t('cards.payTitle', { month: month(st.key) })} onClose={onClose}>
       <div className="grid">
         <Field label={t('cards.payAmount')} error={err}>{id => <input id={id} inputMode="decimal" value={amt} onChange={e => setAmt(e.target.value)} />}</Field>
-        <Field label={t('cards.payAccount')}>{id => <select id={id} value={from} onChange={e => setFrom(e.target.value)}>{list.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select>}</Field>
+        <Field label={t('cards.payAccount')}>{id => <select id={id} value={effectiveFrom} onChange={e => setFrom(e.target.value)}>{list.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select>}</Field>
         <Field label={t('common.date')}>{id => <input id={id} type="date" value={dt} onChange={e => setDt(e.target.value)} />}</Field>
       </div>
       <div className="footer">

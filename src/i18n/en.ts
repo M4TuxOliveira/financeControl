@@ -213,6 +213,7 @@ export const en = {
   'cards.payConfirm': 'Confirm payment',
   'cards.payNeedAccount': 'Add an account first to pay from.',
   'cards.amountRequired': 'Enter an amount.',
+  'cards.dayInvalid': 'Enter a day from 1 to 31.',
   // @@keys-end
 } as const;
 
