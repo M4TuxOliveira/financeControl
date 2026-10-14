@@ -1,103 +1,128 @@
 import { useState } from 'react';
-import { useStore } from '../store';
-import { deleteCategory, saveCategory } from '../actions';
+import type { Category } from '../api/types';
+import { QueryState } from '../components/QueryState';
+import { useI18n } from '../i18n';
+import { errorMessage } from '../i18n/errors';
 import { CAT_ICONS, PALETTE } from '../icons';
-import { CatIcon, ConfirmDelete, Empty, Field, Modal, PageHead, Swatches } from '../ui';
-import { monthKey, today, uid, categoryFamily } from '../lib';
-import type { Category } from '../types';
+import { useCategories, useCreateCategory, useDeleteCategory, useUpdateCategory } from '../queries';
+import { useCategoryLookup } from '../queries/lookups';
+import { CatIcon, ConfirmDelete, Field, Modal, PageHead, Swatches } from '../ui';
+
+// `shown` is the name as first displayed in the field and `orig` the backend's stored name: an unedited system
+// category keeps its backend (English) name instead of being renamed to the translated text.
+type Draft = { id: string | null; name: string; shown: string; orig: string; parentId: string | null; icon: string; color: string };
 
 export function Categories() {
-  const s = useStore();
-  const [form, setForm] = useState<Category | null>(null);
+  const { t } = useI18n();
+  const q = useCategories();
+  const cats = useCategoryLookup();
+  const [form, setForm] = useState<Draft | null>(null);
   const [del, setDel] = useState<Category | null>(null);
-  const key = monthKey(today());
-  const count = (c: Category) => {
-    const fam = categoryFamily(s, c.id);
-    return s.transactions.filter(t => monthKey(t.date) === key && t.categoryId && fam.includes(t.categoryId)).length;
+  const blank = (parent?: Category): Draft => ({ id: null, name: '', shown: '', orig: '', parentId: parent?.id ?? null, icon: parent?.icon ?? 'Paw', color: parent?.color ?? PALETTE[0][1] });
+  const edit = (c: Category): Draft => {
+    const shown = c.system && c.key ? cats.name(c) : c.name;
+    return { id: c.id, name: shown, shown, orig: c.name, parentId: c.parentId, icon: c.icon, color: c.color };
   };
-  const top = s.categories.filter(c => !c.parentId);
-  const blank = (parentId: string | null, parent?: Category): Category =>
-    ({ id: uid(), name: '', parentId, icon: parent?.icon ?? 'Paw', color: parent?.color ?? PALETTE[0][1], system: false });
 
   return (
     <>
-      <PageHead sub={`${top.length} categories`} title="Categories">
-        <button type="button" className="btn btn-1" onClick={() => setForm(blank(null))}>+ New category</button>
+      <PageHead sub={q.data ? t('catpage.count', { n: cats.tops.length }) : ''} title={t('nav.categories')}>
+        <button type="button" className="btn btn-1" onClick={() => setForm(blank())}>+ {t('catpage.new')}</button>
       </PageHead>
-      {top.length === 0 && <section className="card"><Empty>No categories.</Empty></section>}
-      <div className="cols">
-        {top.map(c => (
-          <section className="card" key={c.id}>
-            <div className="card-head" style={{ alignItems: 'center' }}>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <span className="mono" style={{ background: c.color }}><CatIcon name={c.icon} /></span>
-                <span className="stack"><h2>{c.name}</h2><span className="muted" style={{ fontSize: 12 }}>{c.system ? 'Default' : 'Custom'} · {count(c)} transactions this month</span></span>
-              </span>
-            </div>
-            <div className="actions">
-              <button type="button" className="btn-sm" onClick={() => setForm(c)}>Edit</button>
-              <button type="button" className="btn-sm" onClick={() => setForm(blank(c.id, c))}>+ Subcategory</button>
-              <button type="button" className="btn-sm danger" onClick={() => setDel(c)}>Delete</button>
-            </div>
-            <div>{s.categories.filter(x => x.parentId === c.id).map(x => (
-              <div className="line" key={x.id}>
-                <span style={{ flex: 1 }}>{x.name}</span>
-                <span className="muted" style={{ fontSize: 12 }}>{s.transactions.filter(t => t.categoryId === x.id && monthKey(t.date) === key).length} tx</span>
-                <button type="button" className="btn-sm" onClick={() => setForm(x)}>Edit</button>
-                <button type="button" className="btn-sm danger" onClick={() => setDel(x)}>Delete</button>
-              </div>))}</div>
-          </section>))}
-      </div>
-      {form && <CategoryForm cat={form} onClose={() => setForm(null)} />}
+      <QueryState q={q} isEmpty={d => d.length === 0} empty={t('catpage.empty')}>
+        {() => (
+          <div className="cols">
+            {cats.tops.map(c => (
+              <section className="card" key={c.id}>
+                <div className="card-head" style={{ alignItems: 'center' }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <span className="mono" style={{ background: c.color }}><CatIcon name={c.icon} /></span>
+                    <span className="stack"><h2>{cats.name(c)}</h2><span className="muted" style={{ fontSize: 12 }}>{c.system ? t('catpage.default') : t('catpage.custom')}</span></span>
+                  </span>
+                </div>
+                <div className="actions">
+                  <button type="button" className="btn-sm" onClick={() => setForm(edit(c))}>{t('common.edit')}</button>
+                  <button type="button" className="btn-sm" onClick={() => setForm(blank(c))}>+ {t('catpage.addSub')}</button>
+                  <button type="button" className="btn-sm danger" onClick={() => setDel(c)}>{t('common.delete')}</button>
+                </div>
+                <div>{cats.subsOf(c.id).map(s => (
+                  <div className="line" key={s.id}>
+                    <span style={{ flex: 1 }}>{cats.name(s)}</span>
+                    <button type="button" className="btn-sm" onClick={() => setForm(edit(s))}>{t('common.edit')}</button>
+                    <button type="button" className="btn-sm danger" onClick={() => setDel(s)}>{t('common.delete')}</button>
+                  </div>))}</div>
+              </section>))}
+          </div>
+        )}
+      </QueryState>
+      {form && <CategoryForm draft={form} onClose={() => setForm(null)} />}
       {del && <DeleteCategory cat={del} onClose={() => setDel(null)} />}
     </>
   );
 }
 
-function CategoryForm({ cat, onClose }: { cat: Category; onClose: () => void }) {
-  const s = useStore();
-  const isNew = !s.categories.some(c => c.id === cat.id);
-  const [c, setC] = useState(cat);
+function CategoryForm({ draft, onClose }: { draft: Draft; onClose: () => void }) {
+  const { t, tOr } = useI18n();
+  const cats = useCategoryLookup();
+  const create = useCreateCategory();
+  const update = useUpdateCategory();
+  const [c, setC] = useState(draft);
   const [err, setErr] = useState('');
-  const set = <K extends keyof Category>(k: K, v: Category[K]) => setC(x => ({ ...x, [k]: v }));
-  const hasSubs = s.categories.some(x => x.parentId === c.id);
-  const submit = () => {
-    if (!c.name.trim()) return setErr('Give it a name.');
-    saveCategory({ ...c, name: c.name.trim() });
-    onClose();
+  const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setC(x => ({ ...x, [k]: v }));
+  const isNew = c.id === null;
+  const hasSubs = c.id !== null && cats.subsOf(c.id).length > 0;
+  const parents = cats.tops.filter(x => x.id !== c.id);
+  // never submit a parent id the select does not list
+  const parentId = parents.some(x => x.id === c.parentId) ? c.parentId : null;
+
+  const save = async () => {
+    if (!c.name.trim()) return setErr(t('catpage.nameRequired'));
+    const name = c.name === c.shown ? c.orig || c.name.trim() : c.name.trim();
+    const body = { name, parentId, icon: c.icon, color: c.color };
+    try { await (isNew ? create.mutateAsync(body) : update.mutateAsync({ id: c.id!, body })); onClose(); } catch (e) { setErr(errorMessage(e, t)); }
   };
+  const title = c.parentId ? (isNew ? t('catpage.formNewSub') : t('catpage.formEditSub')) : (isNew ? t('catpage.formNewCat') : t('catpage.formEditCat'));
+
   return (
-    <Modal title={(isNew ? 'New ' : 'Edit ') + (c.parentId ? 'subcategory' : 'category')} onClose={onClose}>
+    <Modal title={title} onClose={onClose}>
       <div className="grid">
-        <Field label="Name" error={err}>{id => <input id={id} value={c.name} autoFocus onChange={e => set('name', e.target.value)} />}</Field>
-        <Field label="Parent">{id => <select id={id} value={c.parentId ?? ''} disabled={hasSubs} onChange={e => set('parentId', e.target.value || null)}>
-          <option value="">None (top-level)</option>{s.categories.filter(x => !x.parentId && x.id !== c.id).map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</select>}</Field>
+        <Field label={t('common.name')} error={err}>{id => <input id={id} value={c.name} autoFocus onChange={e => { set('name', e.target.value); setErr(''); }} />}</Field>
+        <Field label={t('catpage.parent')}>{id => (
+          <select id={id} value={parentId ?? ''} disabled={hasSubs} onChange={e => set('parentId', e.target.value || null)}>
+            <option value="">{t('catpage.topLevel')}</option>
+            {parents.map(x => <option key={x.id} value={x.id}>{cats.name(x)}</option>)}
+          </select>)}</Field>
       </div>
-      <div className="fld"><span className="lbl">Icon</span>
-        <div className="icons" role="radiogroup" aria-label="Icon">{Object.keys(CAT_ICONS).map(k => (
-          <button key={k} type="button" role="radio" aria-checked={c.icon === k} aria-label={k} className="iconbtn"
-            style={c.icon === k ? { border: `2px solid ${c.color}`, color: c.color } : undefined} onClick={() => set('icon', k)}><CatIcon name={k} /></button>))}</div></div>
-      <div className="fld"><span className="lbl">Color</span><Swatches value={c.color} onChange={v => set('color', v)} /></div>
+      <div className="fld"><span className="lbl">{t('common.icon')}</span>
+        <div className="icons" role="radiogroup" aria-label={t('common.icon')}>
+          {Object.keys(CAT_ICONS).map(k => (
+            <button key={k} type="button" role="radio" aria-checked={c.icon === k} aria-label={tOr(`icon.${k}`, k)} className="iconbtn"
+              style={c.icon === k ? { border: `2px solid ${c.color}`, color: c.color } : undefined} onClick={() => set('icon', k)}><CatIcon name={k} /></button>))}
+        </div>
+      </div>
+      <div className="fld"><span className="lbl">{t('common.color')}</span><Swatches value={c.color} onChange={v => set('color', v)} /></div>
       <div className="footer">
-        <button type="button" className="btn btn-2" onClick={onClose}>Cancel</button>
-        <button type="button" className="btn btn-1" onClick={submit}>{isNew ? 'Create' : 'Save changes'}</button>
+        <button type="button" className="btn btn-2" onClick={onClose}>{t('common.cancel')}</button>
+        <button type="button" className="btn btn-1" onClick={() => void save()}>{isNew ? t('common.create') : t('common.saveChanges')}</button>
       </div>
     </Modal>
   );
 }
 
 function DeleteCategory({ cat, onClose }: { cat: Category; onClose: () => void }) {
-  const s = useStore();
-  const fam = categoryFamily(s, cat.id);
-  const n = s.transactions.filter(t => t.categoryId && fam.includes(t.categoryId)).length;
-  const options = s.categories.filter(c => !fam.includes(c.id));
-  const [target, setTarget] = useState(cat.parentId ?? '');
+  const { t } = useI18n();
+  const cats = useCategoryLookup();
+  const del = useDeleteCategory();
+  const family = new Set([cat.id, ...cats.subsOf(cat.id).map(s => s.id)]);
+  const [target, setTarget] = useState('');
   return (
-    <ConfirmDelete title={`Delete ${cat.name}?`} cta="Delete" onClose={onClose}
-      body={`${n} transaction${n === 1 ? '' : 's'} use${n === 1 ? 's' : ''} this category${s.categories.some(c => c.parentId === cat.id) ? ' or its subcategories, which are deleted too' : ''}. Budgets on it are removed.`}
-      onConfirm={() => deleteCategory(cat.id, target || null)}>
-      {n > 0 && <Field label="Move transactions to">{id => <select id={id} value={target} onChange={e => setTarget(e.target.value)}>
-        <option value="">Uncategorized</option>{options.map(c => <option key={c.id} value={c.id}>{c.parentId ? '   ' : ''}{c.name}</option>)}</select>}</Field>}
+    <ConfirmDelete title={t('catpage.deleteTitle', { name: cats.name(cat) })} body={t('catpage.deleteBody')} cta={t('catpage.deleteCta')} onClose={onClose}
+      onConfirm={() => del.mutateAsync({ id: cat.id, moveTo: target || undefined })}>
+      <Field label={t('catpage.moveTransactions')}>{id => (
+        <select id={id} value={target} onChange={e => setTarget(e.target.value)}>
+          <option value="">{t('common.uncategorized')}</option>
+          {cats.categories.filter(c => !family.has(c.id)).map(c => <option key={c.id} value={c.id}>{c.parentId ? '— ' : ''}{cats.name(c)}</option>)}
+        </select>)}</Field>
     </ConfirmDelete>
   );
 }
