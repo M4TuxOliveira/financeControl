@@ -9,6 +9,9 @@ export default defineConfig(({ mode }) => {
   return {
     base: './',
     plugins: [react()],
+    // amazon-cognito-identity-js → `buffer` reads Node's `global` at load time. The production build (Rollup
+    // commonjs) rewrites it, but the dev server's esbuild pre-bundle does not: map it to globalThis there.
+    optimizeDeps: { esbuildOptions: { define: { global: 'globalThis' } } },
     test: {
       environment: 'jsdom',
       setupFiles: ['./test/setup.ts'],
