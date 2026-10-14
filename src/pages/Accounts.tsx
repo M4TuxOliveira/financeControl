@@ -69,7 +69,7 @@ function AccountForm({ account, onClose }: { account: Account | null; onClose: (
   const [kind, setKind] = useState<AccountKind>(account?.kind ?? 'checking');
   const [name, setName] = useState(account?.name ?? '');
   const [bank, setBank] = useState(account?.bank ?? '');
-  const [bal, setBal] = useState(account ? moneyInput(account.balance) : '');
+  const [bal, setBal] = useState(account ? (account.balance === 0 ? '0' : moneyInput(account.balance)) : '');
   const [color, setColor] = useState(account?.color ?? PALETTE[2][1]);
   const [inTotal, setInTotal] = useState(account?.inTotal ?? true);
   const [err, setErr] = useState('');

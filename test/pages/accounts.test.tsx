@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../../src/api/client';
@@ -136,6 +136,59 @@ describe('Account form amount validation', () => {
     await openEdit();
     await userEvent.click(screen.getByRole('button', { name: 'Salvar alterações' }));
     expect(vi.mocked(api.updateAccount).mock.calls[0][1]).toMatchObject({ opening: 100000 });
+  });
+});
+
+describe('Account form edit edge cases', () => {
+  const rowOf = async (name: string) => (await screen.findByText(name)).closest('.trow') as HTMLElement;
+  it('zero-balance account can be saved unchanged', async () => {
+    mockApi({ listAccounts: [account({ opening: 5000, balance: 0 })] });
+    vi.mocked(api.updateAccount).mockResolvedValue(account());
+    renderWithProviders(<Accounts />);
+    await userEvent.click(within(await rowOf('Itaú')).getByRole('button', { name: 'Editar' }));
+    expect(screen.getByLabelText('Saldo atual')).toHaveValue('0');
+    await userEvent.click(screen.getByRole('button', { name: 'Salvar alterações' }));
+    expect(screen.queryByText('Informe um valor válido.')).not.toBeInTheDocument();
+    expect(vi.mocked(api.updateAccount).mock.calls[0][1]).toMatchObject({ opening: 5000 });
+  });
+  it.each(['0', '0,00'])('typing %s on a non-zero account sets balance to zero', async v => {
+    vi.mocked(api.updateAccount).mockResolvedValue(account());
+    renderWithProviders(<Accounts />);
+    await userEvent.click(within(await rowOf('Itaú')).getByRole('button', { name: 'Editar' }));
+    const bal = screen.getByLabelText('Saldo atual');
+    await userEvent.clear(bal);
+    await userEvent.type(bal, v);
+    await userEvent.click(screen.getByRole('button', { name: 'Salvar alterações' }));
+    expect(vi.mocked(api.updateAccount).mock.calls[0][1]).toMatchObject({ opening: 10000 });
+  });
+  it('a second submit after fixing the value clears the balance error', async () => {
+    vi.mocked(api.updateAccount).mockResolvedValue(account());
+    renderWithProviders(<Accounts />);
+    await userEvent.click(within(await rowOf('Itaú')).getByRole('button', { name: 'Editar' }));
+    const bal = screen.getByLabelText('Saldo atual');
+    await userEvent.clear(bal);
+    await userEvent.type(bal, 'abc');
+    await userEvent.click(screen.getByRole('button', { name: 'Salvar alterações' }));
+    expect(screen.getByRole('alert')).toHaveTextContent('Informe um valor válido.');
+    await userEvent.clear(bal);
+    await userEvent.type(bal, '910,00');
+    await userEvent.click(screen.getByRole('button', { name: 'Salvar alterações' }));
+    expect(screen.queryByText('Informe um valor válido.')).not.toBeInTheDocument();
+    expect(api.updateAccount).toHaveBeenCalledTimes(1);
+  });
+  it('uses the live balance when the list refetches while the modal is open', async () => {
+    vi.mocked(api.updateAccount).mockResolvedValue(account());
+    const { qc } = renderWithProviders(<Accounts />);
+    await userEvent.click(within(await rowOf('Itaú')).getByRole('button', { name: 'Editar' }));
+    vi.mocked(api.listAccounts).mockResolvedValue([account({ opening: 100000, balance: 80000 }), account({ id: 'a2', name: 'Caixinha', kind: 'savings', balance: 1088000, opening: 1088000 })]);
+    await qc.invalidateQueries({ queryKey: ['accounts'] });
+    await waitFor(() => expect(within(screen.getByText('Caixinha').closest('.trow') as HTMLElement).getByText('R$ 10.880,00')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getAllByText('R$ 800,00').length).toBeGreaterThan(0));
+    const bal = screen.getByLabelText('Saldo atual');
+    await userEvent.clear(bal);
+    await userEvent.type(bal, '950,00');
+    await userEvent.click(screen.getByRole('button', { name: 'Salvar alterações' }));
+    expect(vi.mocked(api.updateAccount).mock.calls[0][1]).toMatchObject({ opening: 115000 });
   });
 });
 

@@ -44,7 +44,7 @@ export function Field({ label, children, error }: { label: string; children: (id
     <div className="fld">
       <label htmlFor={id}>{label}</label>
       {children(id)}
-      {error && <span className="err">{error}</span>}
+      {error && <span className="err" role="alert">{error}</span>}
     </div>
   );
 }
