@@ -24,7 +24,6 @@ DynamoDB + Cognito; serverless-offline locally). The server owns the data and ev
 - `pages/*.tsx` — one per hash route (`#/accounts`), forms and confirm dialogs in the same file; `components/QueryState`
   renders loading/error(+retry)/empty/data. `ui.tsx` has shared primitives (`Modal`, `Field`, `Bar`, `PageHead`…).
 - `prefs.ts` — local-only prefs (theme, display name). `legacy.ts` — reads the old localStorage document for import.
-- `store.ts`, `actions.ts`, `lib.ts`, `types.ts` — the pre-API localStorage app; not imported by the app anymore. Do not extend.
 
 ## Rules
 - **Never recompute server-derived values** (balances, card used/statements, budget pct, goal progress, totals). Render
