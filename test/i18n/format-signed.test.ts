@@ -13,6 +13,10 @@ describe('parseSignedMoney', () => {
     expect(parseSignedMoney('--5', 'pt-BR')).toBeNull();
     expect(parseSignedMoney('5-', 'pt-BR')).toBeNull();
   });
+  it('rejects a lone minus and never returns -0', () => {
+    expect(parseSignedMoney('-', 'pt-BR')).toBeNull();
+    expect(Object.is(parseSignedMoney('-0', 'pt-BR'), 0)).toBe(true);
+  });
   it('round-trips negative values through moneyToInput', () => {
     expect(moneyToInput(-1250, 'pt-BR')).toBe('-12,50');
     expect(parseSignedMoney(moneyToInput(-1250, 'pt-BR'), 'pt-BR')).toBe(-1250);

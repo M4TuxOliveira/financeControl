@@ -169,5 +169,6 @@ export const ptBR: Record<Key, string> = {
   'color.Pink': 'Rosa',
   'color.Amber': 'Âmbar',
   'color.Slate': 'Cinza',
+  'common.invalidAmount': 'Informe um valor válido.',
   // @@keys-end
 };

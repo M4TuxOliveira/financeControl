@@ -91,6 +91,54 @@ describe('Account form', () => {
   });
 });
 
+describe('Account form amount validation', () => {
+  const openNew = async () => {
+    renderWithProviders(<Accounts />);
+    await userEvent.click(await screen.findByRole('button', { name: /Nova conta/ }));
+    await userEvent.type(screen.getByLabelText('Nome da conta'), 'X');
+  };
+  const openEdit = async () => {
+    renderWithProviders(<Accounts />);
+    const row = (await screen.findByText('Itaú')).closest('.trow') as HTMLElement;
+    await userEvent.click(within(row).getByRole('button', { name: 'Editar' }));
+    return screen.getByLabelText('Saldo atual');
+  };
+  it('create with garbage shows an error and does not call the API', async () => {
+    await openNew();
+    await userEvent.type(screen.getByLabelText('Saldo inicial'), 'abc');
+    await userEvent.click(screen.getByRole('button', { name: 'Criar conta' }));
+    expect(screen.getByText('Informe um valor válido.')).toBeInTheDocument();
+    expect(api.createAccount).not.toHaveBeenCalled();
+  });
+  it('create with an empty balance uses opening 0', async () => {
+    vi.mocked(api.createAccount).mockResolvedValue(account());
+    await openNew();
+    await userEvent.click(screen.getByRole('button', { name: 'Criar conta' }));
+    expect(vi.mocked(api.createAccount).mock.calls[0][0].opening).toBe(0);
+  });
+  it('edit with garbage is rejected', async () => {
+    const bal = await openEdit();
+    await userEvent.clear(bal);
+    await userEvent.type(bal, 'abc');
+    await userEvent.click(screen.getByRole('button', { name: 'Salvar alterações' }));
+    expect(screen.getByText('Informe um valor válido.')).toBeInTheDocument();
+    expect(api.updateAccount).not.toHaveBeenCalled();
+  });
+  it('edit with a cleared field is rejected', async () => {
+    const bal = await openEdit();
+    await userEvent.clear(bal);
+    await userEvent.click(screen.getByRole('button', { name: 'Salvar alterações' }));
+    expect(screen.getByText('Informe um valor válido.')).toBeInTheDocument();
+    expect(api.updateAccount).not.toHaveBeenCalled();
+  });
+  it('edit with an unchanged balance keeps the current opening', async () => {
+    vi.mocked(api.updateAccount).mockResolvedValue(account());
+    await openEdit();
+    await userEvent.click(screen.getByRole('button', { name: 'Salvar alterações' }));
+    expect(vi.mocked(api.updateAccount).mock.calls[0][1]).toMatchObject({ opening: 100000 });
+  });
+});
+
 describe('Delete account', () => {
   it('moves transactions to the chosen account', async () => {
     vi.mocked(api.deleteAccount).mockResolvedValue();

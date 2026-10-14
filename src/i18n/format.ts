@@ -65,7 +65,7 @@ export function parseSignedMoney(input: string, locale: Locale): number | null {
   const s = input.trim();
   const neg = s.startsWith('-');
   const v = parseMoney(neg ? s.slice(1) : s, locale);
-  return v === null ? null : neg ? -v : v;
+  return v === null ? null : neg && v !== 0 ? -v : v;
 }
 
 /** Value for a text input: plain digits with the locale's decimal mark, '' for zero. */

@@ -65,6 +65,7 @@ function AccountForm({ account, onClose }: { account: Account | null; onClose: (
   const { t, tOr, parseSigned, moneyInput } = useI18n();
   const create = useCreateAccount();
   const update = useUpdateAccount();
+  const live = useAccounts().data?.find(a => a.id === account?.id) ?? account;
   const [kind, setKind] = useState<AccountKind>(account?.kind ?? 'checking');
   const [name, setName] = useState(account?.name ?? '');
   const [bank, setBank] = useState(account?.bank ?? '');
@@ -72,16 +73,21 @@ function AccountForm({ account, onClose }: { account: Account | null; onClose: (
   const [color, setColor] = useState(account?.color ?? PALETTE[2][1]);
   const [inTotal, setInTotal] = useState(account?.inTotal ?? true);
   const [err, setErr] = useState('');
+  const [balErr, setBalErr] = useState('');
 
   const run = async (fn: () => Promise<unknown>) => {
-    setErr('');
+    setErr(''); setBalErr('');
     try { await fn(); onClose(); } catch (e) { setErr(errorMessage(e, t)); }
   };
   const save = () => {
+    setErr(''); setBalErr('');
     if (!name.trim()) return setErr(t('accounts.nameRequired'));
-    const entered = parseSigned(bal) ?? 0;
-    return run(() => account
-      ? update.mutateAsync({ id: account.id, body: { name: name.trim(), kind, bank, color, inTotal, opening: account.opening + (entered - account.balance) } })
+    const text = bal.trim();
+    const parsed = text === '' ? (account ? null : 0) : parseSigned(text);
+    if (parsed === null) return setBalErr(t('common.invalidAmount'));
+    const entered = parsed;
+    return run(() => account && live
+      ? update.mutateAsync({ id: account.id, body: { name: name.trim(), kind, bank, color, inTotal, opening: live.opening + (entered - live.balance) } })
       : create.mutateAsync({ name: name.trim(), kind, bank, color, inTotal, opening: entered }));
   };
   const toggleArchive = () => run(() => update.mutateAsync({ id: account!.id, body: { archived: !account!.archived } }));
@@ -95,7 +101,7 @@ function AccountForm({ account, onClose }: { account: Account | null; onClose: (
       <div className="grid">
         <Field label={t('accounts.name')} error={err}>{id => <input id={id} placeholder={t('accounts.namePh')} value={name} onChange={e => setName(e.target.value)} autoFocus />}</Field>
         <Field label={t('accounts.institution')}>{id => <input id={id} placeholder={t('common.optional')} value={bank} onChange={e => setBank(e.target.value)} />}</Field>
-        <Field label={account ? t('accounts.currentBalance') : t('accounts.openingBalance')}>{id => <input id={id} inputMode="decimal" value={bal} onChange={e => setBal(e.target.value)} />}</Field>
+        <Field label={account ? t('accounts.currentBalance') : t('accounts.openingBalance')} error={balErr}>{id => <input id={id} inputMode="decimal" value={bal} onChange={e => setBal(e.target.value)} />}</Field>
       </div>
       <div className="fld"><span className="lbl">{t('common.color')}</span><Swatches value={color} onChange={setColor} /></div>
       <label className="check"><input type="checkbox" checked={inTotal} onChange={e => setInTotal(e.target.checked)} />{t('accounts.includeInTotal')}</label>

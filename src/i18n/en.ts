@@ -175,6 +175,7 @@ export const en = {
   'color.Pink': 'Pink',
   'color.Amber': 'Amber',
   'color.Slate': 'Slate',
+  'common.invalidAmount': 'Enter a valid amount.',
   // @@keys-end
 } as const;
 
