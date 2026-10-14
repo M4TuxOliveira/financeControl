@@ -243,6 +243,33 @@ export const en = {
   'icon.Plane': 'Plane',
   'icon.Bolt': 'Energy',
   'icon.Book': 'Book',
+  // month navigation (shared)
+  'month.prev': 'Previous month',
+  'month.next': 'Next month',
+  // budgets
+  'budgets.new': 'New budget',
+  'budgets.spentOfBudgeted': 'Spent of budgeted',
+  'budgets.ofLimit': 'of {limit} · {pct}%',
+  'budgets.leftThisMonth': 'Left this month',
+  'budgets.empty': 'No budgets yet.',
+  'budgets.create': 'Create a budget',
+  'budgets.spent': '{amount} spent',
+  'budgets.over': '{amount} over',
+  'budgets.left': '{amount} left',
+  'budgets.limitOf': 'limit {amount}',
+  'budgets.formEdit': 'Edit budget',
+  'budgets.category': 'Category',
+  'budgets.monthlyLimit': 'Monthly limit',
+  'budgets.alertAt': 'Alert at',
+  'budgets.alertOption': '{pct}% of limit',
+  'budgets.note': 'Applies every month and counts the category together with its subcategories.',
+  'budgets.allHave': 'All categories already have a budget',
+  'budgets.categoryRequired': 'Choose a category without a budget.',
+  'budgets.createCta': 'Create budget',
+  'budgets.limitRequired': 'Enter a monthly limit.',
+  'budgets.deleteTitle': 'Delete the {name} budget?',
+  'budgets.deleteBody': 'Your transactions are kept; only the monthly limit is removed.',
+  'budgets.deleteCta': 'Delete budget',
   // @@keys-end
 } as const;
 
