@@ -378,6 +378,32 @@ export const en = {
   'tx.dateRequired': 'Choose a date.',
   'tx.installmentsMin': 'The amount must be at least {n} cents to split in {n} installments.',
   'tx.retryReceiptNote': 'Saved. Only the receipt upload will be retried.',
+  // settings
+  'settings.sub': 'Language, region and local preferences',
+  'settings.appearance': 'Appearance',
+  'settings.theme.system': 'System',
+  'settings.theme.light': 'Light',
+  'settings.theme.dark': 'Dark',
+  'settings.name': 'Your name',
+  'settings.namePh': 'Shown in the greeting',
+  'settings.region': 'Language and region',
+  'settings.language': 'Language',
+  'settings.currency': 'Currency',
+  'settings.timezone': 'Timezone',
+  'settings.saved': 'Saved.',
+  'settings.import': 'Import from this browser',
+  'settings.importBody': 'Found {accounts} accounts, {cards} cards, {transactions} transactions, {budgets} budgets and {goals} goals saved by the previous version of the app. Import them into your account?',
+  'settings.importCta': 'Import',
+  'settings.importDone': 'Imported: {accounts} accounts, {cards} cards, {categories} new categories, {transactions} transactions, {budgets} budgets, {goals} goals.',
+  'settings.importSkipped': 'Skipped: {transactions} transactions, {budgets} budgets, {receipts} receipts.',
+  'settings.clearLocal': 'Delete the local copy',
+  'settings.session': 'Session',
+  // more
+  'more.transactionsDesc': 'Search and edit everything you recorded',
+  'more.accountsDesc': 'Checking, savings and cash',
+  'more.cardsDesc': 'Cards and their statements',
+  'more.categoriesDesc': 'Categories and subcategories',
+  'more.settingsDesc': 'Language, theme and import',
   // @@keys-end
 } as const;
 
