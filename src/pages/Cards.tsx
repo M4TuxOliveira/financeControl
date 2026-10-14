@@ -188,7 +188,9 @@ function PayModal({ card, st, onClose }: { card: Card; st: Statement; onClose: (
   const list = (accounts.data ?? []).filter(a => !a.archived);
   const [amt, setAmt] = useState(moneyInput(st.total - st.paid));
   const [from, setFrom] = useState('');
-  const effectiveFrom = from || card.payAccountId || list[0]?.id || '';
+  const ids = new Set(list.map(a => a.id));
+  const pick = [from, card.payAccountId].find(x => x && ids.has(x));
+  const effectiveFrom = pick ?? list[0]?.id ?? '';
   const [dt, setDt] = useState(today);
   const [err, setErr] = useState('');
 

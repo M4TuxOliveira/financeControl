@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../../src/api/endpoints';
@@ -158,6 +158,63 @@ describe('Cards', () => {
     expect(within(dlg).getByLabelText('Da conta')).toHaveValue('a2');
     await userEvent.click(within(dlg).getByRole('button', { name: 'Confirmar pagamento' }));
     expect(api.payCard).toHaveBeenCalledWith('k1', expect.objectContaining({ fromAccountId: 'a2' }));
+  });
+  it('pay modal ignores a stale card payAccountId and uses the live account', async () => {
+    mockApi({ listCards: [card({ payAccountId: 'gone' })], listAccounts: [account({ id: 'a9', name: 'Live' })] });
+    vi.mocked(api.payCard).mockResolvedValue(tx());
+    renderWithProviders(<Cards />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Pagar fatura' }));
+    const dlg = screen.getByRole('dialog');
+    await within(dlg).findByRole('option', { name: 'Live' });
+    expect(within(dlg).getByLabelText('Da conta')).toHaveValue('a9');
+    await userEvent.click(within(dlg).getByRole('button', { name: 'Confirmar pagamento' }));
+    expect(api.payCard).toHaveBeenCalledWith('k1', expect.objectContaining({ fromAccountId: 'a9' }));
+  });
+  it('pay modal with only archived accounts shows the need-account error and does not pay', async () => {
+    mockApi({ listCards: [card({ payAccountId: 'a1' })], listAccounts: [account({ archived: true })] });
+    renderWithProviders(<Cards />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Pagar fatura' }));
+    const dlg = screen.getByRole('dialog');
+    await userEvent.click(within(dlg).getByRole('button', { name: 'Confirmar pagamento' }));
+    expect(await within(dlg).findByRole('alert')).toHaveTextContent('Adicione uma conta primeiro para pagar.');
+    expect(api.payCard).not.toHaveBeenCalled();
+  });
+  it('pay modal falls back when an explicit pick disappears after a refetch', async () => {
+    mockApi({ listCards: [card()], listAccounts: [account(), account({ id: 'a2', name: 'Caixinha' })] });
+    vi.mocked(api.payCard).mockResolvedValue(tx());
+    const { qc } = renderWithProviders(<Cards />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Pagar fatura' }));
+    const dlg = screen.getByRole('dialog');
+    await userEvent.selectOptions(within(dlg).getByLabelText('Da conta'), 'a2');
+    vi.mocked(api.listAccounts).mockResolvedValue([account()]);
+    await qc.invalidateQueries();
+    await waitFor(() => expect(within(dlg).queryByRole('option', { name: 'Caixinha' })).not.toBeInTheDocument());
+    expect(within(dlg).getByLabelText('Da conta')).toHaveValue('a1');
+    await userEvent.click(within(dlg).getByRole('button', { name: 'Confirmar pagamento' }));
+    expect(api.payCard).toHaveBeenCalledWith('k1', expect.objectContaining({ fromAccountId: 'a1' }));
+  });
+  it.each([[' 20 ', 20], ['05', 5]])('accepts day input %j as %i', async (typed, expected) => {
+    vi.mocked(api.createCard).mockResolvedValue(card());
+    renderWithProviders(<Cards />);
+    await userEvent.click(await screen.findByRole('button', { name: /Novo cartão/ }));
+    await userEvent.type(screen.getByLabelText('Nome do cartão'), 'X');
+    const d = screen.getByLabelText('Dia de vencimento');
+    await userEvent.clear(d);
+    await userEvent.type(d, typed);
+    await userEvent.click(screen.getByRole('button', { name: 'Criar cartão' }));
+    expect(api.createCard).toHaveBeenCalledWith(expect.objectContaining({ dueDay: expected }));
+  });
+  it('deleting a card resets the selected statement tab', async () => {
+    vi.mocked(api.deleteCard).mockResolvedValue();
+    renderWithProviders(<Cards />);
+    await screen.findByText('Aberta');
+    await userEvent.click(screen.getByRole('tab', { name: /set/i }));
+    expect(await screen.findByText('Paga')).toBeInTheDocument();
+    vi.mocked(api.listCards).mockResolvedValue([{ ...nu(), id: 'k2', name: 'Outro' }]);
+    await userEvent.click(screen.getByRole('button', { name: 'Excluir' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Excluir cartão' }));
+    expect(await screen.findByText('Aberta')).toBeInTheDocument();
+    expect(screen.queryByText('Paga')).not.toBeInTheDocument();
   });
   it('empty state', async () => {
     mockApi();
