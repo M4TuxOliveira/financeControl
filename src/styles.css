@@ -156,3 +156,14 @@ h1,h2,h3{font-family:'Space Grotesk',sans-serif;margin:0;font-weight:600}
 }
 .hide-d{display:none}
 @media (max-width:900px){.hide-d{display:inline}}
+.banner{position:sticky;top:0;z-index:60;background:#B45309;color:#fff;text-align:center;font-size:12px;font-weight:600;padding:4px 8px}
+.splash{min-height:100vh;display:flex;align-items:center;justify-content:center;color:var(--muted)}
+.login{min-height:100vh;display:flex;flex-direction:column;align-items:center}
+.login .banner{align-self:stretch}
+.login-card{margin:10vh 16px 0;width:100%;max-width:400px;gap:16px}
+.login-form{display:flex;flex-direction:column;gap:14px}
+.login-form h1{font-size:22px}
+.side-foot{margin-top:auto}
+.side-logout{width:100%;border-color:#4A515B;color:#D5D9DE}
+.month-nav{display:flex;align-items:center;gap:8px}
+.month-nav .btn-sm{width:36px;padding:0}

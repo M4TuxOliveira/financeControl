@@ -121,6 +121,9 @@ export const en = {
   'auth.configMissing': 'Cognito is not configured (missing VITE_COGNITO_* variables).',
   'auth.unsupportedChallenge': 'This account requires a sign-in step this app does not support yet (MFA).',
   'auth.genericError': 'Could not sign in. Check your connection and try again.',
+  'app.title': 'financeControl PRO',
+  'shell.splash': 'Loading your data…',
+  'shell.profileError': 'Could not load your profile.',
   // @@keys-end
 } as const;
 
