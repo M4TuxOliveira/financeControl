@@ -1,270 +1,368 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useStore } from '../store';
-import { addTransactions, createTransactions, deleteTx, saveTx, type DeleteScope } from '../actions';
-import { ConfirmDelete, Empty, Field, Modal, OptionRadio, PageHead } from '../ui';
+import { useDeferredValue, useEffect, useMemo, useState } from 'react';
+import type { Account, Card, DeleteScope, Repeat, Tx, TxFilters, TxInput, TxType } from '../api/types';
+import { useAuth } from '../auth/AuthProvider';
+import { QueryState } from '../components/QueryState';
+import { amountColor, signedAmount } from '../components/txFormat';
+import { useI18n } from '../i18n';
+import { errorMessage } from '../i18n/errors';
+import { shiftMonth } from '../i18n/format';
+import { txTitle } from '../i18n/txTitle';
 import {
-  accountName, categoryColor, categoryFamily, categoryLabel, fmtDate, fmtMonth, money, moneyInput, monthKey,
-  parseMoney, signed, sortTx, today, byId,
-} from '../lib';
-import type { Repeat, State, Tx, TxType } from '../types';
+  useAccounts, useCards, useCategories, useCreateTransactions, useDeleteTransaction, useTransactions, useUpdateTransaction, useUploadReceipt,
+} from '../queries';
+import { useAccountLookup, useCategoryLookup } from '../queries/lookups';
+import { ConfirmDelete, Field, Modal, OptionRadio, PageHead } from '../ui';
 
-const AMT_COLOR: Record<TxType, string> = { expense: 'var(--neg)', income: 'var(--pos)', transfer: 'var(--ink)' };
-
-function subText(t: Tx) {
-  const bits: string[] = [];
-  if (t.inst) bits.push(`Installment ${t.inst.i}/${t.inst.n}`);
-  if (t.repeat) bits.push(`Repeats ${t.repeat === 'weekly' ? 'weekly' : t.repeat === 'yearly' ? 'yearly' : 'monthly'}`);
-  if (t.date > today()) bits.push('Scheduled');
-  if (t.receipt) bits.push('Receipt attached');
-  return bits.join(' · ') || ' ';
-}
+const TYPES: TxType[] = ['expense', 'income', 'transfer'];
 
 export function Transactions() {
-  const s = useStore();
+  const { t, tOr, money, date, dateShort, month, today } = useI18n();
+  const cats = useCategoryLookup();
+  const acc = useAccountLookup();
   const [form, setForm] = useState<Tx | 'new' | null>(null);
   const [del, setDel] = useState<Tx | null>(null);
-  const [q, setQ] = useState('');
-  const [period, setPeriod] = useState(monthKey(today()));
-  const [acc, setAcc] = useState('');
-  const [cat, setCat] = useState('');
+  const [text, setText] = useState('');
+  const q = useDeferredValue(text);
+  const [mon, setMon] = useState(today.slice(0, 7)); // '' = all time
+  const [account, setAccount] = useState('');
+  const [category, setCategory] = useState('');
   const [type, setType] = useState('');
   const [tag, setTag] = useState('');
 
   // The mobile "+" button links to #/transactions?new
   useEffect(() => {
-    const check = () => {
-      if (location.hash.includes('?new')) { history.replaceState(null, '', '#/transactions'); setForm('new'); }
-    };
+    const check = () => { if (location.hash.includes('?new')) { history.replaceState(null, '', '#/transactions'); setForm('new'); } };
     check();
     addEventListener('hashchange', check);
     return () => removeEventListener('hashchange', check);
   }, []);
 
-  const months = useMemo(() => {
-    const set = new Set(s.transactions.map(t => monthKey(t.date)));
-    set.add(monthKey(today()));
-    return [...set].sort().reverse();
-  }, [s.transactions]);
-  const tags = useMemo(() => [...new Set(s.transactions.flatMap(t => t.tags))].sort(), [s.transactions]);
+  const filters = useMemo<TxFilters>(() => {
+    const f: TxFilters = {};
+    if (mon) f.month = mon;
+    if (account) f.account = account;
+    if (category) f.category = category;
+    if (type) f.type = type as TxType;
+    const tg = tag.trim();
+    if (tg) f.tag = tg.startsWith('#') ? tg : `#${tg}`;
+    if (q.trim()) f.q = q.trim();
+    return f;
+  }, [mon, account, category, type, tag, q]);
+  const list = useTransactions(filters);
+  const hasFilters = Object.keys(filters).some(k => k !== 'month');
 
-  const rows = useMemo(() => {
-    const fam = cat ? categoryFamily(s, cat) : null;
-    const needle = q.trim().toLowerCase();
-    return sortTx(s.transactions.filter(t =>
-      (!period || monthKey(t.date) === period) &&
-      (!acc || t.accountId === acc || t.toId === acc) &&
-      (!fam || (t.categoryId && fam.includes(t.categoryId))) &&
-      (!type || t.type === type) &&
-      (!tag || t.tags.includes(tag)) &&
-      (!needle || (t.desc + ' ' + t.note + ' ' + t.tags.join(' ')).toLowerCase().includes(needle))));
-  }, [s, q, period, acc, cat, type, tag]);
-
-  const income = rows.filter(t => t.type === 'income').reduce((n, t) => n + t.amount, 0);
-  const expense = rows.filter(t => t.type === 'expense').reduce((n, t) => n + t.amount, 0);
-  const noAccounts = s.accounts.length + s.cards.length === 0;
+  const subText = (x: Tx) => {
+    const bits: string[] = [];
+    if (x.inst) bits.push(t('tx.installment', { i: x.inst.i, n: x.inst.n }));
+    if (x.repeat) bits.push(t('tx.repeats', { freq: tOr(`tx.repeat.${x.repeat}`, x.repeat) }));
+    if (x.date > today) bits.push(t('tx.scheduled'));
+    return bits.join(' · ');
+  };
 
   return (
     <>
-      <PageHead sub={`${period ? fmtMonth(period, true) : 'All time'} · ${rows.length} transaction${rows.length === 1 ? '' : 's'}`} title="Transactions">
-        <button type="button" className="btn btn-1" onClick={() => setForm('new')}>+ New transaction</button>
+      <PageHead sub={list.data ? t('tx.sub', { period: mon ? month(mon, true) : t('tx.allTime'), n: list.data.items.length }) : ''} title={t('nav.transactions')}>
+        <div className="month-nav">
+          <button type="button" className="btn-sm" aria-label={t('month.prev')} disabled={!mon} onClick={() => setMon(shiftMonth(mon, -1))}>‹</button>
+          <button type="button" className="btn-sm" aria-label={t('month.next')} disabled={!mon} onClick={() => setMon(shiftMonth(mon, 1))}>›</button>
+          <button type="button" className="btn-sm" aria-pressed={!mon} style={{ width: 'auto', padding: '0 12px' }} onClick={() => setMon(mon ? '' : today.slice(0, 7))}>{t('tx.allTime')}</button>
+        </div>
+        <button type="button" className="btn btn-1" onClick={() => setForm('new')}>+ {t('nav.newTransaction')}</button>
       </PageHead>
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-        <label htmlFor="tx-q" className="sr">Search</label>
-        <input id="tx-q" className="flt" placeholder="Search description, tag, note" style={{ flex: '1 1 220px' }} value={q} onChange={e => setQ(e.target.value)} />
-        <select className="flt" aria-label="Period" value={period} onChange={e => setPeriod(e.target.value)}>
-          <option value="">All time</option>{months.map(m => <option key={m} value={m}>{fmtMonth(m)}</option>)}</select>
-        <select className="flt" aria-label="Account" value={acc} onChange={e => setAcc(e.target.value)}>
-          <option value="">All accounts &amp; cards</option>
-          {[...s.accounts, ...s.cards].map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select>
-        <select className="flt" aria-label="Category" value={cat} onChange={e => setCat(e.target.value)}>
-          <option value="">All categories</option>
-          {s.categories.filter(c => !c.parentId).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
-        <select className="flt" aria-label="Type" value={type} onChange={e => setType(e.target.value)}>
-          <option value="">All types</option><option value="expense">Expenses</option><option value="income">Income</option><option value="transfer">Transfers</option></select>
-        <select className="flt" aria-label="Tag" value={tag} onChange={e => setTag(e.target.value)}>
-          <option value="">Any tag</option>{tags.map(g => <option key={g}>{g}</option>)}</select>
+        <label htmlFor="tx-q" className="sr">{t('tx.search')}</label>
+        <input id="tx-q" className="flt" placeholder={t('tx.search')} style={{ flex: '1 1 220px' }} value={text} onChange={e => setText(e.target.value)} />
+        <select className="flt" aria-label={t('tx.col.account')} value={account} onChange={e => setAccount(e.target.value)}>
+          <option value="">{t('tx.allAccounts')}</option>{[...acc.accounts, ...acc.cards].map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+        </select>
+        <select className="flt" aria-label={t('tx.col.category')} value={category} onChange={e => setCategory(e.target.value)}>
+          <option value="">{t('tx.allCategories')}</option>{cats.tops.map(c => <option key={c.id} value={c.id}>{cats.name(c)}</option>)}
+        </select>
+        <select className="flt" aria-label={t('common.type')} value={type} onChange={e => setType(e.target.value)}>
+          <option value="">{t('tx.allTypes')}</option>{TYPES.map(k => <option key={k} value={k}>{tOr(`txtype.${k}`, k)}</option>)}
+        </select>
+        <input className="flt" aria-label={t('tx.tagFilter')} placeholder={t('tx.tagFilter')} value={tag} onChange={e => setTag(e.target.value)} />
       </div>
 
-      <div className="kpis" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: 12 }}>
-        <div className="card kpi" style={{ padding: 16, gap: 4 }}><span className="lbl">Income</span><span className="num" style={{ fontSize: 20, color: 'var(--pos)' }}>+ {money(income)}</span></div>
-        <div className="card kpi" style={{ padding: 16, gap: 4 }}><span className="lbl">Expenses</span><span className="num" style={{ fontSize: 20, color: 'var(--neg)' }}>− {money(expense)}</span></div>
-        <div className="card kpi" style={{ padding: 16, gap: 4 }}><span className="lbl">Net</span><span className="num" style={{ fontSize: 20 }}>{money(income - expense)}</span></div>
-      </div>
+      <QueryState q={list} isEmpty={d => d.items.length === 0}
+        empty={<>{hasFilters ? t('tx.noMatch') : t('tx.empty')}{!hasFilters && <button type="button" className="btn btn-1" onClick={() => setForm('new')}>{t('tx.addFirst')}</button>}</>}>
+        {({ items, totals }) => (
+          <>
+            <div className="kpis" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: 12 }}>
+              <div className="card kpi" style={{ padding: 16, gap: 4 }}><span className="lbl">{t('tx.income')}</span><span className="num" style={{ fontSize: 20, color: 'var(--pos)' }}>+ {money(totals.income)}</span></div>
+              <div className="card kpi" style={{ padding: 16, gap: 4 }}><span className="lbl">{t('tx.expenses')}</span><span className="num" style={{ fontSize: 20, color: 'var(--neg)' }}>− {money(totals.expense)}</span></div>
+              <div className="card kpi" style={{ padding: 16, gap: 4 }}><span className="lbl">{t('tx.net')}</span><span className="num" style={{ fontSize: 20 }}>{money(totals.net)}</span></div>
+            </div>
+            <section className="card" style={{ padding: '6px 20px 10px' }}>
+              <div className="scroll">
+                <div className="trow thead tx-cols">
+                  <span className="th">{t('tx.col.date')}</span><span className="th">{t('tx.col.description')}</span><span className="th hide-m">{t('tx.col.category')}</span>
+                  <span className="th hide-m">{t('tx.col.account')}</span><span className="th hide-m">{t('tx.col.tags')}</span><span className="th r">{t('tx.col.amount')}</span><span className="th r">{t('tx.col.actions')}</span>
+                </div>
+                {items.map(x => (
+                  <div className="trow tx-cols" key={x.id}>
+                    <span className="muted hide-m" style={{ fontSize: 13 }}>{dateShort(x.date)}</span>
+                    <span className="stack">
+                      <span style={{ fontWeight: 500 }}>{txTitle(t, x)}</span>
+                      <span className="muted" style={{ fontSize: 12 }}>
+                        <span className="hide-d">{date(x.date)} · </span>{subText(x)}
+                        {x.receiptUrl && <> {subText(x) ? '· ' : ''}<a href={x.receiptUrl} target="_blank" rel="noreferrer">{t('tx.receiptView')}</a></>}
+                      </span>
+                    </span>
+                    <span className="hide-m" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      {x.type !== 'transfer' && <span className="dot" style={{ background: cats.color(x.categoryId) }} />}{x.type === 'transfer' ? t('txtype.transfer') : cats.label(x.categoryId)}
+                    </span>
+                    <span className="hide-m" style={{ color: 'var(--ink-2)' }}>{x.type === 'transfer' ? `${acc.name(x.accountId)} → ${acc.name(x.toId)}` : acc.name(x.accountId)}</span>
+                    <span className="hide-m" style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>{x.tags.map(g => <span className="tag" key={g}>{g}</span>)}</span>
+                    <span className="num r" style={{ color: amountColor(x.type) }}>{signedAmount(x, money)}</span>
+                    <span className="actions-c" style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                      {!x.source && <button type="button" className="btn-sm" onClick={() => setForm(x)}>{t('common.edit')}</button>}
+                      <button type="button" className="btn-sm danger" onClick={() => setDel(x)}>{t('common.delete')}</button>
+                    </span>
+                  </div>))}
+              </div>
+            </section>
+          </>
+        )}
+      </QueryState>
 
-      <section className="card" style={{ padding: '6px 20px 10px' }}>
-        {rows.length === 0 ? <Empty>{s.transactions.length === 0 ? 'No transactions yet.' : 'No transactions match these filters.'}
-          {s.transactions.length === 0 && <button type="button" className="btn btn-1" onClick={() => setForm('new')}>Add the first one</button>}</Empty> : (
-          <div className="scroll"><div>
-            <div className="trow thead tx-cols"><span className="th">Date</span><span className="th">Description</span><span className="th hide-m">Category</span><span className="th hide-m">Account</span><span className="th hide-m">Tags</span><span className="th r">Amount</span><span className="th r">Actions</span></div>
-            {rows.map(t => (
-              <div className="trow tx-cols" key={t.id}>
-                <span className="muted hide-m" style={{ fontSize: 13 }}>{fmtDate(t.date)}</span>
-                <span className="stack"><span style={{ fontWeight: 500 }}>{t.desc}</span>
-                  <span className="muted" style={{ fontSize: 12 }}><span className="hide-d">{fmtDate(t.date)} · </span>{subText(t)}<span className="hide-d"> {t.type === 'transfer' ? '' : `· ${categoryLabel(s, t.categoryId)}`}</span></span></span>
-                <span className="hide-m" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  {t.type !== 'transfer' && <span className="dot" style={{ background: categoryColor(s, t.categoryId) }} />}{t.type === 'transfer' ? 'Transfer' : categoryLabel(s, t.categoryId)}</span>
-                <span className="hide-m" style={{ color: 'var(--ink-2)' }}>{t.type === 'transfer' ? `${accountName(s, t.accountId)} → ${accountName(s, t.toId)}` : accountName(s, t.accountId)}</span>
-                <span className="hide-m" style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>{t.tags.map(g => <span className="tag" key={g}>{g}</span>)}</span>
-                <span className="num r" style={{ color: AMT_COLOR[t.type] }}>{signed(t)}</span>
-                <span className="actions-c" style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-                  <button type="button" className="btn-sm" onClick={() => setForm(t)}>Edit</button>
-                  <button type="button" className="btn-sm danger" onClick={() => setDel(t)}>Delete</button>
-                </span>
-              </div>))}
-          </div></div>)}
-      </section>
-
-      {form && (noAccounts
-        ? <Modal title="Add an account first" onClose={() => setForm(null)}>
-            <p style={{ margin: 0, lineHeight: 1.5 }}>Transactions belong to an account or credit card.</p>
-            <div className="footer"><a className="btn btn-1" href="#/accounts" onClick={() => setForm(null)} style={{ color: '#fff' }}>Go to Accounts</a></div></Modal>
-        : <TxForm tx={form === 'new' ? null : form} onClose={() => setForm(null)} />)}
+      {form && <TxDialog tx={form === 'new' ? null : form} onClose={() => setForm(null)} />}
       {del && <DeleteTx tx={del} onClose={() => setDel(null)} />}
     </>
   );
 }
 
-function resizeImage(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => {
-      const k = Math.min(1, 900 / Math.max(img.width, img.height));
-      const c = document.createElement('canvas');
-      c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
-      c.getContext('2d')!.drawImage(img, 0, 0, c.width, c.height);
-      resolve(c.toDataURL('image/jpeg', 0.7));
-    };
-    img.onerror = reject;
-    img.src = URL.createObjectURL(file);
-  });
-}
+/**
+ * The dialog stays mounted while the lists it needs load; it distinguishes loading, failure (+ retry),
+ * "no accounts yet" and the form itself, so opening it never blocks silently.
+ */
+function TxDialog({ tx, onClose }: { tx: Tx | null; onClose: () => void }) {
+  const { t, tOr } = useI18n();
+  const accounts = useAccounts();
+  const cards = useCards();
+  const categories = useCategories();
+  const [type, setType] = useState<TxType>(tx?.type ?? 'expense');
 
-function blank(s: State) {
-  return {
-    type: 'expense' as TxType, amount: '', date: today(), accountId: (s.accounts.find(a => !a.archived) ?? s.cards[0] ?? s.accounts[0])?.id ?? '',
-    toId: '', desc: '', parent: '', sub: '', tags: '', repeat: '' as Repeat | '', inst: false, n: 3, note: '', receipt: undefined as string | undefined,
-  };
-}
+  // A failed background refetch keeps the cached lists, so only a failure without data blocks the form.
+  const failed = [accounts, cards, categories].filter(q => q.isError && q.data === undefined);
+  const empty = accounts.isSuccess && cards.isSuccess && accounts.data.length + cards.data.length === 0;
+  const state = failed.length ? 'error' : accounts.isPending || cards.isPending ? 'loading' : empty ? 'empty' : categories.isPending ? 'loading' : 'ready';
 
-function TxForm({ tx, onClose }: { tx: Tx | null; onClose: () => void }) {
-  const s = useStore();
-  const initial = () => {
-    if (!tx) return blank(s);
-    const c = byId(s.categories, tx.categoryId);
-    return {
-      type: tx.type, amount: moneyInput(tx.amount), date: tx.date, accountId: tx.accountId, toId: tx.toId ?? '', desc: tx.desc,
-      parent: c ? (c.parentId ?? c.id) : '', sub: c?.parentId ? c.id : '', tags: tx.tags.join(', '), repeat: (tx.repeat ?? '') as Repeat | '',
-      inst: false, n: 3, note: tx.note, receipt: tx.receipt,
-    };
-  };
-  const [f, setF] = useState(initial);
-  const [err, setErr] = useState('');
-  const set = <K extends keyof ReturnType<typeof blank>>(k: K, v: ReturnType<typeof blank>[K]) => setF(x => ({ ...x, [k]: v }));
-
-  const fromOptions = f.type === 'expense' ? [...s.accounts.filter(a => !a.archived), ...s.cards] : s.accounts.filter(a => !a.archived);
-  const toOptions = [...s.accounts.filter(a => !a.archived), ...s.cards];
-  const total = parseMoney(f.amount);
-  const instOn = f.inst && f.type === 'expense' && !tx;
-  const subs = s.categories.filter(c => c.parentId === f.parent);
-
-  const submit = (another: boolean) => {
-    if (!total) return setErr('Enter an amount.');
-    if (!f.desc.trim()) return setErr('Add a description.');
-    if (!f.accountId) return setErr('Choose an account.');
-    if (f.type === 'transfer' && (!f.toId || f.toId === f.accountId)) return setErr('Pick two different accounts.');
-    const draft = {
-      type: f.type, amount: total, date: f.date || today(), desc: f.desc.trim(), accountId: f.accountId,
-      toId: f.type === 'transfer' ? f.toId : undefined,
-      categoryId: f.type === 'transfer' ? undefined : (f.sub || f.parent || undefined),
-      tags: f.tags.split(/[,\s]+/).filter(Boolean).map(g => (g.startsWith('#') ? g : '#' + g)),
-      note: f.note.trim(), receipt: f.receipt,
-    };
-    if (tx) saveTx({ ...tx, ...draft });
-    else addTransactions(createTransactions(draft, { installments: instOn ? f.n : 0, repeat: instOn ? undefined : f.repeat || undefined }));
-    if (another) { setF({ ...blank(s), type: f.type, date: f.date, accountId: f.accountId }); setErr(''); } else onClose();
-  };
-
-  const Opts = ({ list }: { list: { id: string; name: string }[] }) => <>{list.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</>;
-
+  if (state === 'empty') {
+    return (
+      <Modal title={t('tx.addAccountFirst')} onClose={onClose}>
+        <p style={{ margin: 0, lineHeight: 1.5 }}>{t('tx.addAccountBody')}</p>
+        <div className="footer"><a className="btn btn-1" href="#/accounts" onClick={onClose} style={{ color: '#fff' }}>{t('tx.goAccounts')}</a></div>
+      </Modal>
+    );
+  }
   return (
-    <Modal wide title={tx ? 'Edit transaction' : 'New transaction'} onClose={onClose}
-      extra={<div className="seg">{(['expense', 'income', 'transfer'] as TxType[]).map(t => (
-        <button key={t} type="button" className={f.type === t ? 'on' : ''} onClick={() => setF(x => ({ ...x, type: t, inst: false, toId: '' }))}>{t[0].toUpperCase() + t.slice(1)}</button>))}</div>}>
-      <div className="grid">
-        <Field label="Amount">{id => <input id={id} inputMode="decimal" placeholder="R$ 0,00" value={f.amount} autoFocus onChange={e => set('amount', e.target.value)}
-          style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 600, fontSize: 18, color: AMT_COLOR[f.type] }} />}</Field>
-        <Field label="Date">{id => <input id={id} type="date" value={f.date} onChange={e => set('date', e.target.value)} />}</Field>
-        <Field label={f.type === 'transfer' ? 'From' : f.type === 'income' ? 'Account' : 'Account or card'}>{id =>
-          <select id={id} value={f.accountId} onChange={e => set('accountId', e.target.value)}>
-            {f.type === 'expense' ? <>
-              <optgroup label="Accounts"><Opts list={s.accounts.filter(a => !a.archived)} /></optgroup>
-              {s.cards.length > 0 && <optgroup label="Credit cards"><Opts list={s.cards} /></optgroup>}</> : <Opts list={fromOptions} />}
-          </select>}</Field>
-        {f.type === 'transfer' && <Field label="To">{id =>
-          <select id={id} value={f.toId} onChange={e => set('toId', e.target.value)}>
-            <option value="">Select…</option>
-            <optgroup label="Accounts"><Opts list={s.accounts.filter(a => !a.archived && a.id !== f.accountId)} /></optgroup>
-            {s.cards.length > 0 && <optgroup label="Credit cards (pay statement)"><Opts list={s.cards} /></optgroup>}
-          </select>}</Field>}
-      </div>
-      <div className="grid">
-        <Field label="Description">{id => <input id={id} placeholder="What was it?" value={f.desc} onChange={e => set('desc', e.target.value)} />}</Field>
-        {f.type !== 'transfer' && <>
-          <Field label="Category">{id => <select id={id} value={f.parent} onChange={e => setF(x => ({ ...x, parent: e.target.value, sub: '' }))}>
-            <option value="">Select category</option>{s.categories.filter(c => !c.parentId).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select>}</Field>
-          <Field label="Subcategory">{id => <select id={id} value={f.sub} onChange={e => set('sub', e.target.value)} disabled={!subs.length}>
-            <option value="">None</option>{subs.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select>}</Field></>}
-      </div>
-      <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(240px,1fr))' }}>
-        <Field label="Tags">{id => <input id={id} placeholder="#weekend, #trip" value={f.tags} onChange={e => set('tags', e.target.value)} />}</Field>
-        {!tx && <Field label="Repeat">{id => <select id={id} value={instOn ? '' : f.repeat} disabled={instOn} onChange={e => set('repeat', e.target.value as Repeat | '')}>
-          <option value="">Never</option><option value="weekly">Weekly (next 26)</option><option value="monthly">Monthly (next 12)</option><option value="yearly">Yearly (next 3)</option></select>}</Field>}
-      </div>
-      {f.type === 'expense' && !tx && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, alignItems: 'center', padding: 14, borderRadius: 14, background: 'var(--bg)' }}>
-          <label className="check" style={{ fontWeight: 500 }}><input type="checkbox" checked={f.inst} onChange={e => set('inst', e.target.checked)} />Split in installments</label>
-          {instOn && <>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <button type="button" className="btn-sm" aria-label="Fewer installments" style={{ width: 40, height: 40 }} onClick={() => set('n', Math.max(2, f.n - 1))}>−</button>
-              <span className="num" style={{ width: 44, textAlign: 'center', fontSize: 17 }}>{f.n}x</span>
-              <button type="button" className="btn-sm" aria-label="More installments" style={{ width: 40, height: 40 }} onClick={() => set('n', Math.min(24, f.n + 1))}>+</button>
-            </div>
-            <span className="muted" style={{ fontSize: 13 }}>{f.n} × {money(Math.floor(total / f.n))}, one per month</span></>}
+    <Modal wide title={tx ? t('tx.formEdit') : t('nav.newTransaction')} onClose={onClose}
+      extra={state === 'ready' && <div className="seg">{TYPES.map(k => (
+        <button key={k} type="button" className={type === k ? 'on' : ''} aria-pressed={type === k} onClick={() => setType(k)}>{tOr(`txtype.${k}`, k)}</button>))}</div>}>
+      {state === 'loading' && <div className="empty" role="status">{t('common.loading')}</div>}
+      {state === 'error' && (
+        <div className="empty" role="alert">
+          {errorMessage(failed[0].error, t)}
+          <button type="button" className="btn btn-2" onClick={() => failed.forEach(q => void q.refetch())}>{t('common.retry')}</button>
         </div>)}
-      {tx && (tx.inst || tx.repeat) && <span className="muted" style={{ fontSize: 13 }}>This entry is part of a series — edits apply to this one only.</span>}
-      <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(240px,1fr))' }}>
-        <Field label="Notes">{id => <textarea id={id} placeholder="Optional" value={f.note} onChange={e => set('note', e.target.value)} />}</Field>
-        <div className="fld"><span className="lbl">Receipt</span>
-          <label className="drop">
-            {f.receipt ? <img src={f.receipt} alt="Receipt" /> : <>Drop image or click to upload</>}
-            <input type="file" accept="image/*" className="sr" onChange={async e => { const file = e.target.files?.[0]; if (file) set('receipt', await resizeImage(file)); }} />
-          </label>
-          {f.receipt && <button type="button" className="link" style={{ textAlign: 'left' }} onClick={() => set('receipt', undefined)}>Remove receipt</button>}
-        </div>
-      </div>
-      {err && <span className="err" role="alert">{err}</span>}
-      <div className="footer">
-        <button type="button" className="btn btn-2" onClick={onClose}>Cancel</button>
-        {!tx && <button type="button" className="btn btn-2" onClick={() => submit(true)}>Save &amp; add another</button>}
-        <button type="button" className="btn btn-1" onClick={() => submit(false)}>{tx ? 'Save changes' : 'Save'}</button>
-      </div>
+      {state === 'ready' && accounts.data && cards.data && (
+        <TxForm tx={tx} type={type} accounts={accounts.data} cards={cards.data} onClose={onClose} />)}
     </Modal>
   );
 }
 
-function DeleteTx({ tx, onClose }: { tx: Tx; onClose: () => void }) {
-  const s = useStore();
-  const [scope, setScope] = useState<DeleteScope>('one');
-  const series = tx.groupId ? s.transactions.filter(t => t.groupId === tx.groupId).length : 0;
+type Errs = { amount?: string; date?: string; desc?: string; account?: string; to?: string; general?: string };
+
+function TxForm({ tx, type, accounts, cards, onClose }: { tx: Tx | null; type: TxType; accounts: Account[]; cards: Card[]; onClose: () => void }) {
+  const { t, today, money, parseMoney, moneyInput } = useI18n();
+  const { devMode } = useAuth();
+  const cats = useCategoryLookup();
+  const create = useCreateTransactions();
+  const update = useUpdateTransaction();
+  const upload = useUploadReceipt();
+
+  const [amount, setAmount] = useState(tx ? moneyInput(tx.amount) : '');
+  const [dt, setDt] = useState(tx?.date ?? today);
+  const [accountChoice, setAccountChoice] = useState<string | null>(null);
+  const [toChoice, setToChoice] = useState<string | null>(null);
+  const [desc, setDesc] = useState(tx?.desc ?? '');
+  const [parentChoice, setParentChoice] = useState<string | null>(null);
+  const [subChoice, setSubChoice] = useState<string | null>(null);
+  const [tagsText, setTagsText] = useState(tx?.tags.join(', ') ?? '');
+  const [repeat, setRepeat] = useState<Repeat | ''>(tx?.repeat ?? '');
+  const [inst, setInst] = useState(false);
+  const [n, setN] = useState(3);
+  const [note, setNote] = useState(tx?.note ?? '');
+  const [file, setFile] = useState<File | null>(null);
+  const [saved, setSaved] = useState<Tx | null>(null);
+  const [errs, setErrs] = useState<Errs>({});
+  const [busy, setBusy] = useState(false);
+
+  // Options: non-archived accounts (+ cards for expenses), plus the edited transaction's own archived
+  // account so that editing never silently moves it. Selected values always resolve to a listed option.
+  const keep = (a: Account, id?: string) => !a.archived || (!!tx && a.id === id);
+  const fromAccounts = accounts.filter(a => keep(a, tx?.accountId));
+  const fromCards = type === 'expense' ? cards : [];
+  const fromIds = [...fromAccounts, ...fromCards].map(x => x.id);
+  const wantedFrom = accountChoice ?? tx?.accountId ?? '';
+  const accountId = fromIds.includes(wantedFrom) ? wantedFrom : (fromIds[0] ?? '');
+
+  const toAccounts = accounts.filter(a => keep(a, tx?.toId) && a.id !== accountId);
+  const toIds = [...toAccounts, ...cards].map(x => x.id);
+  const wantedTo = toChoice ?? tx?.toId ?? '';
+  const toId = toIds.includes(wantedTo) ? wantedTo : '';
+
+  const initialCat = tx?.categoryId ? cats.categories.find(c => c.id === tx.categoryId) : undefined;
+  const wantedParent = parentChoice ?? (initialCat ? (initialCat.parentId ?? initialCat.id) : '');
+  const parent = cats.tops.some(c => c.id === wantedParent) ? wantedParent : '';
+  const subs = parent ? cats.subsOf(parent) : [];
+  const wantedSub = subChoice ?? (initialCat?.parentId ? initialCat.id : '');
+  const sub = subs.some(c => c.id === wantedSub) ? wantedSub : '';
+
+  const preview = parseMoney(amount) ?? 0; // display only (installment hint)
+  const instOn = inst && type === 'expense' && !tx;
+  const color = amountColor(type);
+
+  const reset = () => { setAmount(''); setDesc(''); setTagsText(''); setNote(''); setFile(null); setSaved(null); setErrs({}); };
+
+  const validate = (): { body: TxInput } | { errs: Errs } => {
+    const e: Errs = {};
+    const cents = amount.trim() === '' ? 0 : parseMoney(amount);
+    if (cents === null) e.amount = t('common.invalidAmount');
+    else if (cents === 0) e.amount = t('tx.amountRequired');
+    if (!dt) e.date = t('tx.dateRequired');
+    if (!desc.trim()) e.desc = t('tx.descRequired');
+    if (!accountId) e.account = t('tx.accountRequired');
+    if (type === 'transfer' && (!toId || toId === accountId)) e.to = t('tx.pickTwo');
+    if (Object.keys(e).length || !cents) return { errs: e };
+    return {
+      body: {
+        type, amount: cents, date: dt, desc: desc.trim(), accountId,
+        toId: type === 'transfer' ? toId : undefined,
+        categoryId: type === 'transfer' ? undefined : (sub || parent || undefined),
+        tags: tagsText.split(/[,\s]+/).filter(Boolean).map(g => (g.startsWith('#') ? g : `#${g}`)),
+        note: note.trim(),
+      },
+    };
+  };
+
+  const save = async (another: boolean) => {
+    if (busy) return;
+    let target = saved;
+    if (!target) {
+      const v = validate();
+      if ('errs' in v) return setErrs(v.errs);
+      setErrs({});
+      setBusy(true);
+      try {
+        if (tx) target = await update.mutateAsync({ id: tx.id, body: v.body });
+        else target = (await create.mutateAsync({ ...v.body, ...(instOn ? { installments: n } : repeat ? { repeat } : {}) }))[0];
+        setSaved(target);
+      } catch (e) {
+        setBusy(false);
+        return setErrs({ general: errorMessage(e, t) });
+      }
+    }
+    setErrs({});
+    setBusy(true);
+    if (file && !devMode && target) {
+      try { await upload.mutateAsync({ txId: target.id, file }); } catch {
+        setBusy(false);
+        return setErrs({ general: t('tx.receiptFail') });
+      }
+    }
+    setBusy(false);
+    if (another && !tx) reset(); else onClose();
+  };
+
+  const Opts = ({ items }: { items: { id: string; name: string }[] }) => <>{items.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</>;
+
   return (
-    <ConfirmDelete title={`Delete “${tx.desc}”?`} cta="Delete" onClose={onClose} onConfirm={() => deleteTx(tx, scope)}
-      body={`${signed(tx)} on ${fmtDate(tx.date)} · balances and statements will be recalculated.`}>
-      {series > 1 && <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <OptionRadio name="scope" checked={scope === 'one'} onChange={() => setScope('one')}>Only this one</OptionRadio>
-        <OptionRadio name="scope" checked={scope === 'future'} onChange={() => setScope('future')}>This and all future ones</OptionRadio>
-        <OptionRadio name="scope" checked={scope === 'all'} onChange={() => setScope('all')}>{tx.inst ? `All ${tx.inst.n} installments` : `Every occurrence of this repeat (${series})`}</OptionRadio>
-      </div>}
+    <>
+      <div className="grid">
+        <Field label={t('common.amount')} error={errs.amount}>{id => <input id={id} inputMode="decimal" value={amount} autoFocus onChange={e => setAmount(e.target.value)}
+          style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 600, fontSize: 18, color }} />}</Field>
+        <Field label={t('common.date')} error={errs.date}>{id => <input id={id} type="date" value={dt} onChange={e => setDt(e.target.value)} />}</Field>
+        <Field label={type === 'transfer' ? t('tx.from') : type === 'income' ? t('tx.accountOnly') : t('tx.account')} error={errs.account}>{id => (
+          <select id={id} value={accountId} onChange={e => setAccountChoice(e.target.value)}>
+            {!accountId && <option value="">{t('tx.select')}</option>}
+            {type === 'expense' ? <>
+              <optgroup label={t('tx.groupAccounts')}><Opts items={fromAccounts} /></optgroup>
+              {fromCards.length > 0 && <optgroup label={t('tx.groupCards')}><Opts items={fromCards} /></optgroup>}</> : <Opts items={fromAccounts} />}
+          </select>)}</Field>
+        {type === 'transfer' && <Field label={t('tx.to')} error={errs.to}>{id => (
+          <select id={id} value={toId} onChange={e => setToChoice(e.target.value)}>
+            <option value="">{t('tx.select')}</option>
+            <optgroup label={t('tx.groupAccounts')}><Opts items={toAccounts} /></optgroup>
+            {cards.length > 0 && <optgroup label={t('tx.groupCardsPay')}><Opts items={cards} /></optgroup>}
+          </select>)}</Field>}
+      </div>
+      <div className="grid">
+        <Field label={t('tx.description')} error={errs.desc}>{id => <input id={id} placeholder={t('tx.descPh')} value={desc} onChange={e => setDesc(e.target.value)} />}</Field>
+        {type !== 'transfer' && <>
+          <Field label={t('tx.category')}>{id => (
+            <select id={id} value={parent} onChange={e => { setParentChoice(e.target.value); setSubChoice(''); }}>
+              <option value="">{t('tx.selectCategory')}</option>{cats.tops.map(c => <option key={c.id} value={c.id}>{cats.name(c)}</option>)}
+            </select>)}</Field>
+          <Field label={t('tx.subcategory')}>{id => (
+            <select id={id} value={sub} onChange={e => setSubChoice(e.target.value)} disabled={!subs.length}>
+              <option value="">{t('common.none')}</option>{subs.map(c => <option key={c.id} value={c.id}>{cats.name(c)}</option>)}
+            </select>)}</Field></>}
+      </div>
+      <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(240px,1fr))' }}>
+        <Field label={t('tx.tags')}>{id => <input id={id} placeholder={t('tx.tagsPh')} value={tagsText} onChange={e => setTagsText(e.target.value)} />}</Field>
+        {!tx && <Field label={t('tx.repeatLabel')}>{id => (
+          <select id={id} value={instOn ? '' : repeat} disabled={instOn} onChange={e => setRepeat(e.target.value as Repeat | '')}>
+            <option value="">{t('tx.repeatNever')}</option><option value="weekly">{t('tx.repeatWeekly')}</option><option value="monthly">{t('tx.repeatMonthly')}</option><option value="yearly">{t('tx.repeatYearly')}</option>
+          </select>)}</Field>}
+      </div>
+      {type === 'expense' && !tx && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, alignItems: 'center', padding: 14, borderRadius: 14, background: 'var(--bg)' }}>
+          <label className="check" style={{ fontWeight: 500 }}><input type="checkbox" checked={inst} onChange={e => setInst(e.target.checked)} />{t('tx.split')}</label>
+          {instOn && <>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <button type="button" className="btn-sm" aria-label={t('tx.fewer')} style={{ width: 40, height: 40 }} onClick={() => setN(Math.max(2, n - 1))}>−</button>
+              <span className="num" style={{ width: 44, textAlign: 'center', fontSize: 17 }}>{n}x</span>
+              <button type="button" className="btn-sm" aria-label={t('tx.more')} style={{ width: 40, height: 40 }} onClick={() => setN(Math.min(24, n + 1))}>+</button>
+            </div>
+            <span className="muted" style={{ fontSize: 13 }}>{t('tx.installHint', { n, amount: money(Math.floor(preview / n)) })}</span></>}
+        </div>)}
+      {tx && (tx.inst || tx.repeat) && <span className="muted" style={{ fontSize: 13 }}>{t('tx.seriesNote')}</span>}
+      <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(240px,1fr))' }}>
+        <Field label={t('common.notes')}>{id => <textarea id={id} placeholder={t('common.optional')} value={note} onChange={e => setNote(e.target.value)} />}</Field>
+        <div className="fld"><span className="lbl">{t('tx.receipt')}</span>
+          <label className="drop" style={devMode ? { opacity: 0.6, cursor: 'not-allowed' } : undefined}>
+            {file ? file.name : t('tx.receiptDrop')}
+            <input type="file" accept="image/jpeg,image/png,image/webp" className="sr" disabled={devMode} aria-label={t('tx.receiptDrop')} onChange={e => setFile(e.target.files?.[0] ?? null)} />
+          </label>
+          {devMode && <span className="muted" style={{ fontSize: 12 }}>{t('tx.receiptDev')}</span>}
+        </div>
+      </div>
+      {errs.general && <p className="err" role="alert" style={{ margin: 0 }}>{errs.general}</p>}
+      <div className="footer">
+        <button type="button" className="btn btn-2" onClick={onClose}>{t('common.cancel')}</button>
+        {!tx && <button type="button" className="btn btn-2" disabled={busy} onClick={() => void save(true)}>{t('tx.saveAnother')}</button>}
+        <button type="button" className="btn btn-1" disabled={busy} onClick={() => void save(false)}>{tx ? t('common.saveChanges') : t('common.save')}</button>
+      </div>
+    </>
+  );
+}
+
+function DeleteTx({ tx, onClose }: { tx: Tx; onClose: () => void }) {
+  const { t, money, date } = useI18n();
+  const del = useDeleteTransaction();
+  const [scope, setScope] = useState<DeleteScope>('one');
+  return (
+    <ConfirmDelete title={t('tx.deleteTitle', { desc: tx.desc })} body={t('tx.deleteBody', { amount: money(tx.amount), date: date(tx.date) })} cta={t('common.delete')} onClose={onClose}
+      onConfirm={() => del.mutateAsync({ id: tx.id, scope })}>
+      {tx.groupId && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <OptionRadio name="scope" checked={scope === 'one'} onChange={() => setScope('one')}>{t('tx.scopeOne')}</OptionRadio>
+          <OptionRadio name="scope" checked={scope === 'future'} onChange={() => setScope('future')}>{t('tx.scopeFuture')}</OptionRadio>
+          <OptionRadio name="scope" checked={scope === 'all'} onChange={() => setScope('all')}>{tx.inst ? t('tx.scopeAllInst', { n: tx.inst.n }) : t('tx.scopeAllRepeat')}</OptionRadio>
+        </div>)}
     </ConfirmDelete>
   );
 }
