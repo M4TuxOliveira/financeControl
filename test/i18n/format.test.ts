@@ -38,8 +38,25 @@ describe('parseMoney (review focus 1)', () => {
     expect(parseMoney('-5', 'pt-BR')).toBeNull();
     expect(parseMoney('1,2,3', 'pt-BR')).toBeNull();
   });
+  it('rejects malformed, cross-locale and over-precise input instead of guessing', () => {
+    for (const s of ['1e5', '1.234,5.6', '1,234.56', '0.001', '1.2345', '0,001', '10,999', '1,005', '1,234', '5-', '1.234.56']) {
+      expect(parseMoney(s, 'pt-BR'), s).toBeNull();
+    }
+    expect(parseMoney('1.234,56', 'en')).toBeNull();
+    expect(parseMoney('99999999999999999999', 'pt-BR')).toBeNull();
+  });
+  it('accepts well-formed variants', () => {
+    expect(parseMoney('1.234.567,89', 'pt-BR')).toBe(123456789);
+    expect(parseMoney('1 234,56', 'pt-BR')).toBe(123456);
+    expect(parseMoney('  10,5  ', 'pt-BR')).toBe(1050);
+    expect(parseMoney(',50', 'pt-BR')).toBe(50);
+    expect(parseMoney('.50', 'en')).toBe(50);
+    expect(parseMoney('1.000', 'pt-BR')).toBe(100000);
+    expect(parseMoney('R$ 1.234,56', 'pt-BR')).toBe(123456);
+    expect(parseMoney('US$ 1,234.56', 'en')).toBe(123456);
+  });
   it('round-trips through moneyToInput', () => {
-    for (const c of [1, 99, 100, 123456, 100000000]) {
+    for (const c of [1, 29, 99, 100, 1005, 123456, 100000000, 1000000001]) {
       for (const l of ['pt-BR', 'en'] as const) expect(parseMoney(moneyToInput(c, l), l)).toBe(c);
     }
     expect(moneyToInput(0, 'pt-BR')).toBe('');

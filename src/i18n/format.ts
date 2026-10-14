@@ -23,27 +23,40 @@ export function formatMonth(key: string, locale: Locale, long = false): string {
   return new Intl.DateTimeFormat(intlLocale(locale), { timeZone: 'UTC', month: long ? 'long' : 'short', year: 'numeric' }).format(utc(`${key}-01`));
 }
 
-/** Cents from what a person typed; `null` when empty or not a non-negative amount. */
+/**
+ * Cents from what a person typed; `null` when empty, malformed, ambiguous, negative,
+ * or with more than two decimals. Never rounds and never guesses across locales.
+ */
 export function parseMoney(input: string, locale: Locale): number | null {
-  const s = input.replace(/[^\d.,-]/g, '');
-  if (!s || s.includes('-')) return null;
+  const s = input.replace(/^\s*[A-Za-z]{0,3}\p{Sc}/u, '').replace(/\s+/g, '');
+  if (!/^[\d.,]+$/.test(s)) return null;
   const dec = locale === 'pt-BR' ? ',' : '.';
   const grp = locale === 'pt-BR' ? '.' : ',';
-  let normalized: string;
+  const g = `\\${grp}`;
+  const grouped = new RegExp(`^[1-9]\\d{0,2}(${g}\\d{3})+$`);
+  let int: string;
+  let frac = '';
+  const decParts = s.split(dec);
+  if (decParts.length > 2) return null;
   if (s.includes(dec)) {
-    if (s.split(dec).length > 2) return null;
-    normalized = s.split(grp).join('').replace(dec, '.');
+    [int, frac] = decParts;
+    if (!/^\d{1,2}$/.test(frac)) return null;
+    if (int.includes(grp)) {
+      if (!grouped.test(int)) return null;
+      int = int.split(grp).join('');
+    } else if (!/^\d*$/.test(int)) return null;
   } else if (s.includes(grp)) {
-    const pieces = s.split(grp);
-    const grouped = /^\d{1,3}$/.test(pieces[0]) && pieces.slice(1).every(p => /^\d{3}$/.test(p));
-    if (grouped) normalized = pieces.join('');
-    else if (pieces.length === 2) normalized = `${pieces[0]}.${pieces[1]}`; // lone separator that is not a grouping → decimal
-    else return null;
+    if (grouped.test(s)) {
+      int = s.split(grp).join('');
+    } else {
+      const pieces = s.split(grp);
+      if (pieces.length !== 2 || !/^\d*$/.test(pieces[0]) || !/^\d{1,2}$/.test(pieces[1])) return null;
+      [int, frac] = pieces;
+    }
   } else {
-    normalized = s;
+    int = s;
   }
-  if (!/^\d+(\.\d+)?$/.test(normalized)) return null;
-  const n = Math.round(Number(normalized) * 100);
+  const n = Number(int || '0') * 100 + Number(frac.padEnd(2, '0'));
   return Number.isSafeInteger(n) ? n : null;
 }
 
