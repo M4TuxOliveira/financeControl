@@ -59,11 +59,11 @@ export const ratio = (a: number, b: number) => Math.min(100, pct(a, b));
 export const level = (p: number, alert = 85) => (p >= 100 ? 'var(--danger)' : p >= alert ? 'var(--warn)' : 'var(--pos)');
 
 export function Swatches({ value, onChange }: { value: string; onChange: (c: string) => void }) {
-  const { t } = useI18n();
+  const { t, tOr } = useI18n();
   return (
     <div className="swatches" role="radiogroup" aria-label={t('common.color')}>
       {PALETTE.map(([name, c]) => (
-        <button key={c} type="button" role="radio" aria-checked={value === c} aria-label={name}
+        <button key={c} type="button" role="radio" aria-checked={value === c} aria-label={tOr(`color.${name}`, name)}
           className={'sw' + (value === c ? ' on' : '')} style={{ background: c, color: c }} onClick={() => onChange(c)} />
       ))}
     </div>

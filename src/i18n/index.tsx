@@ -2,7 +2,7 @@ import { createContext, useContext, useMemo, type ReactNode } from 'react';
 import { en, type Key } from './en';
 import { ptBR } from './pt-BR';
 import {
-  formatDate, formatDateShort, formatMoney, formatMonth, moneyToInput, parseMoney, todayIn, type Locale,
+  formatDate, formatDateShort, formatMoney, formatMonth, moneyToInput, parseMoney, parseSignedMoney, todayIn, type Locale,
 } from './format';
 
 export type { Locale } from './format';
@@ -17,6 +17,7 @@ export type I18n = {
   dateShort: (iso: string) => string;
   month: (key: string, long?: boolean) => string;
   parseMoney: (s: string) => number | null;
+  parseSigned: (s: string) => number | null;
   moneyInput: (cents: number) => string;
 };
 
@@ -43,6 +44,7 @@ export function I18nProvider({ locale, currency = 'BRL', timezone = 'America/Sao
       dateShort: d => formatDateShort(d, locale),
       month: (k, long) => formatMonth(k, locale, long),
       parseMoney: s => parseMoney(s, locale),
+      parseSigned: s => parseSignedMoney(s, locale),
       moneyInput: c => moneyToInput(c, locale),
     };
   }, [locale, currency, timezone, today]);

@@ -60,6 +60,14 @@ export function parseMoney(input: string, locale: Locale): number | null {
   return Number.isSafeInteger(n) ? n : null;
 }
 
+/** Like parseMoney but allows one leading minus (balances can be negative). */
+export function parseSignedMoney(input: string, locale: Locale): number | null {
+  const s = input.trim();
+  const neg = s.startsWith('-');
+  const v = parseMoney(neg ? s.slice(1) : s, locale);
+  return v === null ? null : neg ? -v : v;
+}
+
 /** Value for a text input: plain digits with the locale's decimal mark, '' for zero. */
 export function moneyToInput(cents: number, locale: Locale): string {
   if (!cents) return '';
