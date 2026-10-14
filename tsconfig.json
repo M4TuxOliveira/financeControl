@@ -10,5 +10,5 @@
     "skipLibCheck": true,
     "isolatedModules": true
   },
-  "include": ["src", "test", "e2e", "vite.config.ts", "vite.env-guard.ts"]
+  "include": ["src", "test", "e2e", "vite.config.ts", "vite.env-guard.ts", "playwright.config.ts"]
 }
