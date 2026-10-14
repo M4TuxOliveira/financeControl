@@ -1,7 +1,30 @@
 import { useState, type FormEvent } from 'react';
 import { useI18n } from '../i18n';
+import type { Key } from '../i18n/en';
 import { Field } from '../ui';
 import { useAuth } from './AuthProvider';
+
+/** Cognito / backend sign-in error → catalog key. Matches on name/code AND message (Cognito reuses codes). */
+function loginErrorKey(e: unknown): Key {
+  const x = e as { name?: string; code?: string; message?: string } | null;
+  const msg = x?.message ?? '';
+  const has = (k: string) => [msg, x?.name, x?.code].includes(k);
+  if (has('CONFIG')) return 'auth.configMissing';
+  if (has('INVALID_DEV_ID')) return 'auth.invalidDevId';
+  if (has('UNSUPPORTED_CHALLENGE')) return 'auth.unsupportedChallenge';
+  if (has('NotAuthorizedException')) {
+    if (/disabled/i.test(msg)) return 'auth.userDisabled';
+    if (/attempts exceeded/i.test(msg)) return 'auth.tooManyAttempts';
+    if (/temporary password has expired/i.test(msg)) return 'auth.tempPasswordExpired';
+    return 'auth.invalidCredentials';
+  }
+  if (has('UserNotFoundException')) return 'auth.invalidCredentials';
+  if (has('TooManyRequestsException') || has('LimitExceededException')) return 'auth.tooManyAttempts';
+  if (has('PasswordResetRequiredException') || has('UserNotConfirmedException')) return 'auth.accountNotReady';
+  if (has('InvalidPasswordException')) return 'auth.passwordPolicy';
+  if (has('NetworkError') || e instanceof TypeError || x?.name === 'TypeError' || /failed to fetch|network ?error/i.test(msg)) return 'errors.NETWORK';
+  return 'auth.genericError';
+}
 
 export function LoginPage() {
   const { t } = useI18n();
@@ -14,16 +37,7 @@ export function LoginPage() {
 
   const run = async (fn: () => Promise<void>) => {
     setBusy(true); setError('');
-    try { await fn(); } catch (e) {
-      const x = e as { name?: string; code?: string; message?: string } | null;
-      const ids = [x?.message, x?.name, x?.code];
-      const has = (k: string) => ids.includes(k);
-      setError(has('CONFIG') ? t('auth.configMissing')
-        : has('INVALID_DEV_ID') ? t('auth.invalidDevId')
-        : has('UNSUPPORTED_CHALLENGE') ? t('auth.unsupportedChallenge')
-        : has('NotAuthorizedException') || has('UserNotFoundException') ? t('auth.invalidCredentials')
-        : t('auth.genericError'));
-    } finally { setBusy(false); }
+    try { await fn(); } catch (e) { setError(t(loginErrorKey(e))); } finally { setBusy(false); }
   };
   const submit = (e: FormEvent) => { e.preventDefault(); void run(() => auth.signIn(id, auth.devMode ? undefined : secret)); };
   const submitNew = (e: FormEvent) => { e.preventDefault(); void run(() => auth.completeNewPassword(newPw)); };

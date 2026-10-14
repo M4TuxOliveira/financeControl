@@ -116,7 +116,7 @@ export const ptBR: Record<Key, string> = {
   'auth.sessionExpired': 'Sua sessão expirou. Entre novamente.',
   'auth.configMissing': 'O Cognito não está configurado (faltam variáveis VITE_COGNITO_*).',
   'auth.unsupportedChallenge': 'Esta conta exige uma etapa de login que o app ainda não suporta (MFA).',
-  'auth.genericError': 'Não foi possível entrar. Verifique sua conexão e tente novamente.',
+  'auth.genericError': 'Não foi possível entrar. Tente novamente.',
   'app.title': 'financeControl PRO',
   'shell.splash': 'Carregando seus dados…',
   'shell.profileError': 'Não foi possível carregar seu perfil.',
@@ -390,5 +390,10 @@ export const ptBR: Record<Key, string> = {
   'more.cardsDesc': 'Cartões e suas faturas',
   'more.categoriesDesc': 'Categorias e subcategorias',
   'more.settingsDesc': 'Idioma, tema e importação',
+  'auth.userDisabled': 'Esta conta está desativada. Fale com o administrador.',
+  'auth.tooManyAttempts': 'Muitas tentativas. Aguarde alguns minutos e tente novamente.',
+  'auth.tempPasswordExpired': 'A senha temporária expirou. Peça uma nova ao administrador.',
+  'auth.accountNotReady': 'Esta conta ainda não está pronta para entrar. Fale com o administrador.',
+  'auth.passwordPolicy': 'Essa senha não atende aos requisitos (pelo menos 10 caracteres com maiúsculas, minúsculas e números).',
   // @@keys-end
 };

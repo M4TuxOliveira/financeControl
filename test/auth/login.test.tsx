@@ -53,10 +53,21 @@ describe('LoginPage', () => {
   });
   it.each([
     [{ name: 'NotAuthorizedException' }, 'Wrong email or password.'],
+    [{ name: 'NotAuthorizedException', code: 'NotAuthorizedException', message: 'Incorrect username or password.' }, 'Wrong email or password.'],
+    [{ code: 'NotAuthorizedException', message: 'User is disabled.' }, 'This account is disabled. Contact the administrator.'],
+    [{ name: 'NotAuthorizedException', message: 'Password attempts exceeded' }, 'Too many attempts. Wait a few minutes and try again.'],
+    [{ name: 'NotAuthorizedException', message: 'Temporary password has expired and must be reset by an administrator.' }, 'The temporary password has expired. Ask the administrator for a new one.'],
     [{ name: 'UserNotFoundException' }, 'Wrong email or password.'],
+    [{ name: 'TooManyRequestsException', message: 'Too many requests' }, 'Too many attempts. Wait a few minutes and try again.'],
+    [{ code: 'LimitExceededException', message: 'Attempt limit exceeded' }, 'Too many attempts. Wait a few minutes and try again.'],
+    [{ name: 'PasswordResetRequiredException', message: 'Password reset required for the user' }, 'This account is not ready to sign in yet. Contact the administrator.'],
+    [{ name: 'UserNotConfirmedException', message: 'User is not confirmed.' }, 'This account is not ready to sign in yet. Contact the administrator.'],
     [{ message: 'UNSUPPORTED_CHALLENGE' }, 'This account requires a sign-in step this app does not support yet (MFA).'],
     [{ message: 'CONFIG' }, 'Cognito is not configured (missing VITE_COGNITO_* variables).'],
-    [{ message: 'boom' }, 'Could not sign in. Check your connection and try again.'],
+    [{ name: 'NetworkError', code: 'NetworkError', message: 'Network error' }, 'Could not reach the server. Check your connection.'],
+    [{ name: 'TypeError', message: 'Failed to fetch' }, 'Could not reach the server. Check your connection.'],
+    [{ message: 'Failed to fetch' }, 'Could not reach the server. Check your connection.'],
+    [{ message: 'boom' }, 'Could not sign in. Please try again.'],
   ])('maps error %j to a message', async (props, text) => {
     const b = fake({ signIn: vi.fn(async () => { throw Object.assign(new Error(''), props); }) });
     mount(b, false, 'en');
@@ -64,6 +75,27 @@ describe('LoginPage', () => {
     await userEvent.type(screen.getByLabelText('Password'), 'pw');
     await userEvent.click(screen.getByRole('button', { name: 'Sign in' }));
     expect(await screen.findByRole('alert')).toHaveTextContent(text);
+  });
+  it('maps InvalidPasswordException on the new-password form to the password policy', async () => {
+    const b = fake({ signIn: vi.fn(async () => 'newPassword' as const),
+      completeNewPassword: vi.fn(async () => { throw Object.assign(new Error('Password does not conform to policy'), { name: 'InvalidPasswordException', code: 'InvalidPasswordException' }); }) });
+    mount(b, false, 'en');
+    await userEvent.type(await screen.findByLabelText('Email'), 'me@x.com');
+    await userEvent.type(screen.getByLabelText('Password'), 'tmp');
+    await userEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+    await userEvent.type(await screen.findByLabelText('New password'), 'short');
+    await userEvent.click(screen.getByRole('button', { name: 'Set password' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('That password does not meet the requirements (at least 10 characters with upper case, lower case and numbers).');
+  });
+  it('pt-BR: neutral generic error and a disabled-account message', async () => {
+    const b = fake({ signIn: vi.fn().mockRejectedValueOnce(new Error('boom')).mockRejectedValueOnce(Object.assign(new Error('User is disabled.'), { name: 'NotAuthorizedException' })) });
+    mount(b, false);
+    await userEvent.type(await screen.findByLabelText('E-mail'), 'me@x.com');
+    await userEvent.type(screen.getByLabelText('Senha'), 'pw');
+    await userEvent.click(screen.getByRole('button', { name: 'Entrar' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Não foi possível entrar. Tente novamente.');
+    await userEvent.click(screen.getByRole('button', { name: 'Entrar' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Esta conta está desativada. Fale com o administrador.');
   });
   it('maps INVALID_DEV_ID in dev mode', async () => {
     const b = fake({ signIn: vi.fn(async () => { throw new Error('INVALID_DEV_ID'); }) });

@@ -120,7 +120,7 @@ export const en = {
   'auth.sessionExpired': 'Your session expired. Please sign in again.',
   'auth.configMissing': 'Cognito is not configured (missing VITE_COGNITO_* variables).',
   'auth.unsupportedChallenge': 'This account requires a sign-in step this app does not support yet (MFA).',
-  'auth.genericError': 'Could not sign in. Check your connection and try again.',
+  'auth.genericError': 'Could not sign in. Please try again.',
   'app.title': 'financeControl PRO',
   'shell.splash': 'Loading your data…',
   'shell.profileError': 'Could not load your profile.',
@@ -404,6 +404,11 @@ export const en = {
   'more.cardsDesc': 'Cards and their statements',
   'more.categoriesDesc': 'Categories and subcategories',
   'more.settingsDesc': 'Language, theme and import',
+  'auth.userDisabled': 'This account is disabled. Contact the administrator.',
+  'auth.tooManyAttempts': 'Too many attempts. Wait a few minutes and try again.',
+  'auth.tempPasswordExpired': 'The temporary password has expired. Ask the administrator for a new one.',
+  'auth.accountNotReady': 'This account is not ready to sign in yet. Contact the administrator.',
+  'auth.passwordPolicy': 'That password does not meet the requirements (at least 10 characters with upper case, lower case and numbers).',
   // @@keys-end
 } as const;
 
