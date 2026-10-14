@@ -1,21 +1,26 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('amazon-cognito-identity-js', () => {
-  const state = { current: null as unknown, result: 'success' as 'success' | 'fail' | 'newPassword' };
+  const state = { current: null as unknown, result: 'success' as string, valid: true, signedOutCalled: false };
   class CognitoUserPool { constructor(public cfg: unknown) {} getCurrentUser() { return state.current; } }
   class CognitoUser {
     constructor(public o: unknown) {}
     authenticateUser(_d: unknown, cb: { onSuccess: (r: unknown) => void; onFailure: (e: Error) => void; newPasswordRequired: (a: unknown) => void }) {
       if (state.result === 'success') { state.current = this; cb.onSuccess({}); }
       else if (state.result === 'fail') cb.onFailure(new Error('NotAuthorizedException'));
-      else cb.newPasswordRequired({});
+      else if (state.result === 'newPassword') cb.newPasswordRequired({});
+      else (cb as unknown as Record<string, (a: unknown) => void>)[state.result]({});
     }
-    completeNewPasswordChallenge(_p: string, _a: unknown, cb: { onSuccess: (r: unknown) => void }) { state.current = this; cb.onSuccess({}); }
+    completeNewPasswordChallenge(_p: string, _a: unknown, cb: { onSuccess: (r: unknown) => void }) {
+      if (state.result.startsWith('c:')) return (cb as unknown as Record<string, () => void>)[state.result.slice(2)]();
+      state.current = this; cb.onSuccess({});
+    }
+    signedOut = false;
     getSession(cb: (e: Error | null, s: unknown) => void) {
-      cb(null, { isValid: () => true, getAccessToken: () => ({ getJwtToken: () => 'access-1' }), getRefreshToken: () => ({}) });
+      cb(null, { isValid: () => state.valid, getAccessToken: () => ({ getJwtToken: () => 'access-1' }), getRefreshToken: () => ({}) });
     }
     refreshSession(_t: unknown, cb: (e: Error | null, s: unknown) => void) { cb(null, { getAccessToken: () => ({ getJwtToken: () => 'access-2' }) }); }
-    signOut() { state.current = null; }
+    signOut() { state.current = null; state.signedOutCalled = true; }
   }
   class AuthenticationDetails { constructor(public d: unknown) {} }
   return { CognitoUserPool, CognitoUser, AuthenticationDetails, __state: state };
@@ -24,11 +29,29 @@ vi.mock('amazon-cognito-identity-js', () => {
 import * as lib from 'amazon-cognito-identity-js';
 import { createCognitoBackend, createMissingConfigBackend } from '../../src/auth/cognito';
 
-const st = (lib as unknown as { __state: { current: unknown; result: string } }).__state;
+const st = (lib as unknown as { __state: { current: unknown; result: string; valid: boolean; signedOutCalled: boolean } }).__state;
 const make = () => createCognitoBackend({ userPoolId: 'sa-east-1_x', clientId: 'c' });
-beforeEach(() => { st.current = null; st.result = 'success'; });
+beforeEach(() => { st.current = null; st.result = 'success'; st.valid = true; st.signedOutCalled = false; });
 
 describe('cognito backend', () => {
+  it.each(['mfaRequired', 'totpRequired', 'mfaSetup', 'selectMFAType', 'customChallenge'])('sign-in %s rejects instead of hanging', async name => {
+    st.result = name;
+    await expect(make().signIn('a@b.c', 'pw')).rejects.toThrow('UNSUPPORTED_CHALLENGE');
+  }, 1000);
+  it.each(['mfaRequired', 'totpRequired', 'mfaSetup', 'selectMFAType', 'customChallenge'])('new-password %s rejects instead of hanging', async name => {
+    st.result = 'newPassword';
+    const b = make();
+    await b.signIn('a@b.c', 'tmp');
+    st.result = 'c:' + name;
+    await expect(b.completeNewPassword('x')).rejects.toThrow('UNSUPPORTED_CHALLENGE');
+  }, 1000);
+  it('restore removes a dead stored user when the session is invalid', async () => {
+    const b = make();
+    await b.signIn('a@b.c', 'pw');
+    st.valid = false;
+    expect(await b.restore()).toBe(false);
+    expect(st.signedOutCalled).toBe(true);
+  });
   it('restore is false with no current user, true once signed in', async () => {
     const b = make();
     expect(await b.restore()).toBe(false);

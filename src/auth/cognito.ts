@@ -2,6 +2,8 @@ import { AuthenticationDetails, CognitoUser, CognitoUserPool, type CognitoUserSe
 import { createDevBackend, DEV_AUTH } from './dev';
 import type { AuthBackend } from './types';
 
+const unsupported = (reject: (e: Error) => void) => () => reject(new Error('UNSUPPORTED_CHALLENGE'));
+
 export function createCognitoBackend(cfg: { userPoolId: string; clientId: string }): AuthBackend {
   const pool = new CognitoUserPool({ UserPoolId: cfg.userPoolId, ClientId: cfg.clientId });
   let pending: CognitoUser | null = null;
@@ -10,7 +12,10 @@ export function createCognitoBackend(cfg: { userPoolId: string; clientId: string
   return {
     async restore() {
       const u = pool.getCurrentUser();
-      return u ? !!(await session(u)) : false;
+      if (!u) return false;
+      const s = await session(u);
+      if (!s || !s.isValid()) { u.signOut(); return false; }
+      return true;
     },
     signIn(email, password) {
       return new Promise((resolve, reject) => {
@@ -19,13 +24,26 @@ export function createCognitoBackend(cfg: { userPoolId: string; clientId: string
           onSuccess: () => resolve('ok'),
           onFailure: reject,
           newPasswordRequired: () => { pending = user; resolve('newPassword'); },
+          mfaRequired: unsupported(reject),
+          totpRequired: unsupported(reject),
+          mfaSetup: unsupported(reject),
+          selectMFAType: unsupported(reject),
+          customChallenge: unsupported(reject),
         });
       });
     },
     completeNewPassword(pw) {
       return new Promise<void>((resolve, reject) => {
         if (!pending) return reject(new Error('No pending password challenge'));
-        pending.completeNewPasswordChallenge(pw, {}, { onSuccess: () => { pending = null; resolve(); }, onFailure: reject });
+        pending.completeNewPasswordChallenge(pw, {}, {
+          onSuccess: () => { pending = null; resolve(); },
+          onFailure: reject,
+          mfaRequired: unsupported(reject),
+          totpRequired: unsupported(reject),
+          mfaSetup: unsupported(reject),
+          selectMFAType: unsupported(reject),
+          customChallenge: unsupported(reject),
+        });
       });
     },
     async getAccessToken() {

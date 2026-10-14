@@ -51,4 +51,24 @@ describe('LoginPage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Definir senha' }));
     await waitFor(() => expect(b.completeNewPassword).toHaveBeenCalledWith('Perm4nent!pass'));
   });
+  it.each([
+    [{ name: 'NotAuthorizedException' }, 'Wrong email or password.'],
+    [{ name: 'UserNotFoundException' }, 'Wrong email or password.'],
+    [{ message: 'UNSUPPORTED_CHALLENGE' }, 'This account requires a sign-in step this app does not support yet (MFA).'],
+    [{ message: 'CONFIG' }, 'Cognito is not configured (missing VITE_COGNITO_* variables).'],
+    [{ message: 'boom' }, 'Could not sign in. Check your connection and try again.'],
+  ])('maps error %j to a message', async (props, text) => {
+    const b = fake({ signIn: vi.fn(async () => { throw Object.assign(new Error(''), props); }) });
+    mount(b, false, 'en');
+    await userEvent.type(await screen.findByLabelText('Email'), 'me@x.com');
+    await userEvent.type(screen.getByLabelText('Password'), 'pw');
+    await userEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(text);
+  });
+  it('maps INVALID_DEV_ID in dev mode', async () => {
+    const b = fake({ signIn: vi.fn(async () => { throw new Error('INVALID_DEV_ID'); }) });
+    mount(b, true, 'en');
+    await userEvent.click(await screen.findByRole('button', { name: 'Enter as dev user' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Use 1–40 letters');
+  });
 });

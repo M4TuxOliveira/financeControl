@@ -53,4 +53,13 @@ describe('AuthProvider', () => {
     expect(screen.getByTestId('e')).toHaveTextContent('true');
     expect(b.signOut).toHaveBeenCalled();
   });
+  it('a late restore() does not overwrite a state set by signIn()', async () => {
+    let release: (v: boolean) => void = () => {};
+    const b = fake({ restore: () => new Promise<boolean>(r => { release = r; }) });
+    mount(b);
+    await act(async () => { screen.getByText('in').click(); });
+    expect(screen.getByTestId('s')).toHaveTextContent('signedIn');
+    await act(async () => { release(false); });
+    expect(screen.getByTestId('s')).toHaveTextContent('signedIn');
+  });
 });

@@ -115,5 +115,7 @@ export const ptBR: Record<Key, string> = {
   'auth.setPassword': 'Definir senha',
   'auth.sessionExpired': 'Sua sessão expirou. Entre novamente.',
   'auth.configMissing': 'O Cognito não está configurado (faltam variáveis VITE_COGNITO_*).',
+  'auth.unsupportedChallenge': 'Esta conta exige uma etapa de login que o app ainda não suporta (MFA).',
+  'auth.genericError': 'Não foi possível entrar. Verifique sua conexão e tente novamente.',
   // @@keys-end
 };

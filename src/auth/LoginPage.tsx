@@ -15,8 +15,14 @@ export function LoginPage() {
   const run = async (fn: () => Promise<void>) => {
     setBusy(true); setError('');
     try { await fn(); } catch (e) {
-      const m = e instanceof Error ? e.message : '';
-      setError(m === 'CONFIG' ? t('auth.configMissing') : m === 'INVALID_DEV_ID' ? t('auth.invalidDevId') : t('auth.invalidCredentials'));
+      const x = e as { name?: string; code?: string; message?: string } | null;
+      const ids = [x?.message, x?.name, x?.code];
+      const has = (k: string) => ids.includes(k);
+      setError(has('CONFIG') ? t('auth.configMissing')
+        : has('INVALID_DEV_ID') ? t('auth.invalidDevId')
+        : has('UNSUPPORTED_CHALLENGE') ? t('auth.unsupportedChallenge')
+        : has('NotAuthorizedException') || has('UserNotFoundException') ? t('auth.invalidCredentials')
+        : t('auth.genericError'));
     } finally { setBusy(false); }
   };
   const submit = (e: FormEvent) => { e.preventDefault(); void run(() => auth.signIn(id, auth.devMode ? undefined : secret)); };
