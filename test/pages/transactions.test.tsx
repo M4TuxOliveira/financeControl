@@ -69,7 +69,7 @@ describe('Transactions list', () => {
     await userEvent.click(within(dlg).getByRole('button', { name: 'Excluir' }));
     expect(api.deleteTransaction).toHaveBeenCalledWith('s1', 'future');
   });
-  it('shows the receipt link and a retryable error state', async () => {
+  it('shows the receipt link', async () => {
     mockApi({ listTransactions: list([tx({ receiptUrl: 'https://s3.test/r' })]), listAccounts: [account()], listCards: [] });
     renderWithProviders(<Transactions />);
     expect(await screen.findByRole('link', { name: 'Ver comprovante' })).toHaveAttribute('href', 'https://s3.test/r');
@@ -368,5 +368,84 @@ describe('Project rules', () => {
     const row = screen.getByText('TV').closest('.trow') as HTMLElement;
     await userEvent.click(within(row).getByRole('button', { name: 'Editar' }));
     expect(await within(screen.getByRole('dialog')).findByText(/faz parte de uma série/)).toBeInTheDocument();
+  });
+
+  it('the list shows a translated error with a retry that recovers', async () => {
+    vi.mocked(api.listTransactions).mockRejectedValueOnce(new ApiError(500, 'INTERNAL', 'x'));
+    renderWithProviders(<Transactions />);
+    expect(await screen.findByRole('alert')).toHaveTextContent('O servidor teve um problema. Tente novamente em instantes.');
+    await userEvent.click(screen.getByRole('button', { name: 'Tentar novamente' }));
+    expect(await screen.findByText('iFood')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+  it('installments: an amount below n cents is rejected under the amount field', async () => {
+    const dlg = await open();
+    await userEvent.type(within(dlg).getByLabelText('Valor'), '0,02');
+    await userEvent.type(within(dlg).getByLabelText('Descrição'), 'x');
+    await userEvent.click(within(dlg).getByLabelText('Dividir em parcelas'));
+    await userEvent.click(within(dlg).getByRole('button', { name: 'Salvar' }));
+    expect(within(fieldOf(dlg, 'Valor')).getByRole('alert')).toHaveTextContent('O valor deve ser de pelo menos 3 centavos para dividir em 3 parcelas.');
+    expect(api.createTransactions).not.toHaveBeenCalled();
+  });
+  it('installments: an amount of exactly n cents is allowed', async () => {
+    vi.mocked(api.createTransactions).mockResolvedValue([tx()]);
+    const dlg = await open();
+    await userEvent.type(within(dlg).getByLabelText('Valor'), '0,03');
+    await userEvent.type(within(dlg).getByLabelText('Descrição'), 'x');
+    await userEvent.click(within(dlg).getByLabelText('Dividir em parcelas'));
+    await userEvent.click(within(dlg).getByRole('button', { name: 'Salvar' }));
+    expect(api.createTransactions).toHaveBeenCalledWith(expect.objectContaining({ amount: 3, installments: 3 }));
+  });
+  it('a mobile "+" while an Edit dialog is open shows an empty new-transaction form', async () => {
+    renderWithProviders(<Transactions />);
+    const row = (await screen.findByText('iFood')).closest('.trow') as HTMLElement;
+    await userEvent.click(within(row).getByRole('button', { name: 'Editar' }));
+    expect(await within(screen.getByRole('dialog')).findByLabelText('Valor')).toHaveValue('86,90');
+    location.hash = '#/transactions?new';
+    await waitFor(() => expect(screen.getByRole('dialog')).toHaveTextContent('Nova transação'));
+    const dlg = screen.getByRole('dialog');
+    expect(await within(dlg).findByLabelText('Valor')).toHaveValue('');
+    expect(within(dlg).getByLabelText('Descrição')).toHaveValue('');
+    expect(within(dlg).getByRole('button', { name: 'Salvar' })).toBeInTheDocument();
+    expect(location.hash).toBe('#/transactions');
+  });
+  it('only archived accounts and no cards → asks to add one first', async () => {
+    mockApi({ listTransactions: list(), listAccounts: [account({ archived: true })], listCards: [] });
+    renderWithProviders(<Transactions />);
+    await userEvent.click(await screen.findByRole('button', { name: /Nova transação/ }));
+    await waitFor(() => expect(screen.getByRole('dialog')).toHaveTextContent('Adicione uma conta primeiro'));
+  });
+  it('no usable accounts: the empty "Contas" group is not rendered', async () => {
+    mockApi({ listTransactions: list(), listAccounts: [account({ archived: true })], listCards: [card()] });
+    const dlg = await open();
+    const sel = within(dlg).getByLabelText('Conta ou cartão');
+    expect(sel.querySelector('optgroup[label="Contas"]')).toBeNull();
+    expect(sel.querySelector('optgroup[label="Cartões de crédito"]')).not.toBeNull();
+    expect(sel).toHaveValue('k1');
+  });
+  it('the delete dialog of a system transfer uses the translated title', async () => {
+    mockApi({
+      listTransactions: list([tx({ id: 'sys', type: 'transfer', desc: 'Nubank', source: 'card_payment', accountId: 'a1', toId: 'k1', categoryId: undefined })]),
+      listAccounts: [account()], listCards: [card()],
+    });
+    renderWithProviders(<Transactions />);
+    const row = (await screen.findByText('Pagamento de fatura · Nubank')).closest('.trow') as HTMLElement;
+    await userEvent.click(within(row).getByRole('button', { name: 'Excluir' }));
+    expect(screen.getByRole('dialog')).toHaveTextContent('Excluir “Pagamento de fatura · Nubank”?');
+  });
+  it('after a failed receipt upload the fields are locked and a note explains that only the upload is retried', async () => {
+    vi.mocked(api.createTransactions).mockResolvedValue([tx({ id: 'new1' })]);
+    vi.mocked(receipt.uploadReceipt).mockRejectedValueOnce(new Error('s3 down'));
+    const dlg = await open();
+    expect(within(dlg).queryByText('Salva. Só o envio do comprovante será repetido.')).not.toBeInTheDocument();
+    await userEvent.type(within(dlg).getByLabelText('Valor'), '9,90');
+    await userEvent.type(within(dlg).getByLabelText('Descrição'), 'Padaria');
+    await userEvent.upload(within(dlg).getByLabelText(/Clique para escolher uma imagem/), new File(['x'], 'r.png', { type: 'image/png' }));
+    await userEvent.click(within(dlg).getByRole('button', { name: 'Salvar' }));
+    expect(await within(dlg).findByText('Salva. Só o envio do comprovante será repetido.')).toBeInTheDocument();
+    for (const l of ['Valor', 'Data', 'Conta ou cartão', 'Descrição', 'Categoria', 'Tags', 'Repetir', 'Observações']) expect(within(dlg).getByLabelText(l)).toBeDisabled();
+    expect(within(dlg).getByRole('button', { name: 'Receita' })).toBeDisabled();
+    expect(within(dlg).getByLabelText(/r\.png/)).toBeEnabled();
+    expect(within(dlg).getByRole('button', { name: 'Salvar' })).toBeEnabled();
   });
 });

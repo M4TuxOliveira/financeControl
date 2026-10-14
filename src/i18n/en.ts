@@ -376,6 +376,8 @@ export const en = {
   'tx.addAccountBody': 'Transactions belong to an account or credit card.',
   'tx.goAccounts': 'Go to Accounts',
   'tx.dateRequired': 'Choose a date.',
+  'tx.installmentsMin': 'The amount must be at least {n} cents to split in {n} installments.',
+  'tx.retryReceiptNote': 'Saved. Only the receipt upload will be retried.',
   // @@keys-end
 } as const;
 

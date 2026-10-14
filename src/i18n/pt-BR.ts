@@ -364,5 +364,7 @@ export const ptBR: Record<Key, string> = {
   'tx.addAccountBody': 'As transações pertencem a uma conta ou cartão de crédito.',
   'tx.goAccounts': 'Ir para Contas',
   'tx.dateRequired': 'Escolha uma data.',
+  'tx.installmentsMin': 'O valor deve ser de pelo menos {n} centavos para dividir em {n} parcelas.',
+  'tx.retryReceiptNote': 'Salva. Só o envio do comprovante será repetido.',
   // @@keys-end
 };

@@ -127,7 +127,7 @@ export function Transactions() {
         )}
       </QueryState>
 
-      {form && <TxDialog tx={form === 'new' ? null : form} onClose={() => setForm(null)} />}
+      {form && <TxDialog key={form === 'new' ? 'new' : form.id} tx={form === 'new' ? null : form} onClose={() => setForm(null)} />}
       {del && <DeleteTx tx={del} onClose={() => setDel(null)} />}
     </>
   );
@@ -143,10 +143,13 @@ function TxDialog({ tx, onClose }: { tx: Tx | null; onClose: () => void }) {
   const cards = useCards();
   const categories = useCategories();
   const [type, setType] = useState<TxType>(tx?.type ?? 'expense');
+  const [locked, setLocked] = useState(false);
 
   // A failed background refetch keeps the cached lists, so only a failure without data blocks the form.
   const failed = [accounts, cards, categories].filter(q => q.isError && q.data === undefined);
-  const empty = accounts.isSuccess && cards.isSuccess && accounts.data.length + cards.data.length === 0;
+  // Archived accounts can't take new transactions; the edited tx's own account still counts.
+  const empty = accounts.isSuccess && cards.isSuccess
+    && accounts.data.filter(a => !a.archived || a.id === tx?.accountId).length + cards.data.length === 0;
   const state = failed.length ? 'error' : accounts.isPending || cards.isPending ? 'loading' : empty ? 'empty' : categories.isPending ? 'loading' : 'ready';
 
   if (state === 'empty') {
@@ -160,7 +163,7 @@ function TxDialog({ tx, onClose }: { tx: Tx | null; onClose: () => void }) {
   return (
     <Modal wide title={tx ? t('tx.formEdit') : t('nav.newTransaction')} onClose={onClose}
       extra={state === 'ready' && <div className="seg">{TYPES.map(k => (
-        <button key={k} type="button" className={type === k ? 'on' : ''} aria-pressed={type === k} onClick={() => setType(k)}>{tOr(`txtype.${k}`, k)}</button>))}</div>}>
+        <button key={k} type="button" className={type === k ? 'on' : ''} aria-pressed={type === k} disabled={locked} onClick={() => setType(k)}>{tOr(`txtype.${k}`, k)}</button>))}</div>}>
       {state === 'loading' && <div className="empty" role="status">{t('common.loading')}</div>}
       {state === 'error' && (
         <div className="empty" role="alert">
@@ -168,14 +171,16 @@ function TxDialog({ tx, onClose }: { tx: Tx | null; onClose: () => void }) {
           <button type="button" className="btn btn-2" onClick={() => failed.forEach(q => void q.refetch())}>{t('common.retry')}</button>
         </div>)}
       {state === 'ready' && accounts.data && cards.data && (
-        <TxForm tx={tx} type={type} accounts={accounts.data} cards={cards.data} onClose={onClose} />)}
+        <TxForm tx={tx} type={type} accounts={accounts.data} cards={cards.data} onClose={onClose} onLock={setLocked} />)}
     </Modal>
   );
 }
 
 type Errs = { amount?: string; date?: string; desc?: string; account?: string; to?: string; general?: string };
 
-function TxForm({ tx, type, accounts, cards, onClose }: { tx: Tx | null; type: TxType; accounts: Account[]; cards: Card[]; onClose: () => void }) {
+function TxForm({ tx, type, accounts, cards, onClose, onLock }: {
+  tx: Tx | null; type: TxType; accounts: Account[]; cards: Card[]; onClose: () => void; onLock: (locked: boolean) => void;
+}) {
   const { t, today, money, parseMoney, moneyInput } = useI18n();
   const { devMode } = useAuth();
   const cats = useCategoryLookup();
@@ -199,6 +204,9 @@ function TxForm({ tx, type, accounts, cards, onClose }: { tx: Tx | null; type: T
   const [saved, setSaved] = useState<Tx | null>(null);
   const [errs, setErrs] = useState<Errs>({});
   const [busy, setBusy] = useState(false);
+  // Once saved, only the receipt upload can be retried: the transaction fields are locked so edits aren't silently dropped.
+  const locked = !!saved;
+  useEffect(() => onLock(locked), [locked, onLock]);
 
   // Options: non-archived accounts (+ cards for expenses), plus the edited transaction's own archived
   // account so that editing never silently moves it. Selected values always resolve to a listed option.
@@ -232,6 +240,7 @@ function TxForm({ tx, type, accounts, cards, onClose }: { tx: Tx | null; type: T
     const cents = amount.trim() === '' ? 0 : parseMoney(amount);
     if (cents === null) e.amount = t('common.invalidAmount');
     else if (cents === 0) e.amount = t('tx.amountRequired');
+    else if (instOn && cents < n) e.amount = t('tx.installmentsMin', { n });
     if (!dt) e.date = t('tx.dateRequired');
     if (!desc.trim()) e.desc = t('tx.descRequired');
     if (!accountId) e.account = t('tx.accountRequired');
@@ -281,6 +290,7 @@ function TxForm({ tx, type, accounts, cards, onClose }: { tx: Tx | null; type: T
 
   return (
     <>
+      <fieldset disabled={locked} style={{ border: 0, padding: 0, margin: 0, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div className="grid">
         <Field label={t('common.amount')} error={errs.amount}>{id => <input id={id} inputMode="decimal" value={amount} autoFocus onChange={e => setAmount(e.target.value)}
           style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 600, fontSize: 18, color }} />}</Field>
@@ -289,13 +299,13 @@ function TxForm({ tx, type, accounts, cards, onClose }: { tx: Tx | null; type: T
           <select id={id} value={accountId} onChange={e => setAccountChoice(e.target.value)}>
             {!accountId && <option value="">{t('tx.select')}</option>}
             {type === 'expense' ? <>
-              <optgroup label={t('tx.groupAccounts')}><Opts items={fromAccounts} /></optgroup>
+              {fromAccounts.length > 0 && <optgroup label={t('tx.groupAccounts')}><Opts items={fromAccounts} /></optgroup>}
               {fromCards.length > 0 && <optgroup label={t('tx.groupCards')}><Opts items={fromCards} /></optgroup>}</> : <Opts items={fromAccounts} />}
           </select>)}</Field>
         {type === 'transfer' && <Field label={t('tx.to')} error={errs.to}>{id => (
           <select id={id} value={toId} onChange={e => setToChoice(e.target.value)}>
             <option value="">{t('tx.select')}</option>
-            <optgroup label={t('tx.groupAccounts')}><Opts items={toAccounts} /></optgroup>
+            {toAccounts.length > 0 && <optgroup label={t('tx.groupAccounts')}><Opts items={toAccounts} /></optgroup>}
             {cards.length > 0 && <optgroup label={t('tx.groupCardsPay')}><Opts items={cards} /></optgroup>}
           </select>)}</Field>}
       </div>
@@ -330,8 +340,9 @@ function TxForm({ tx, type, accounts, cards, onClose }: { tx: Tx | null; type: T
             <span className="muted" style={{ fontSize: 13 }}>{t('tx.installHint', { n, amount: money(Math.floor(preview / n)) })}</span></>}
         </div>)}
       {tx && (tx.inst || tx.repeat) && <span className="muted" style={{ fontSize: 13 }}>{t('tx.seriesNote')}</span>}
+      </fieldset>
       <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(240px,1fr))' }}>
-        <Field label={t('common.notes')}>{id => <textarea id={id} placeholder={t('common.optional')} value={note} onChange={e => setNote(e.target.value)} />}</Field>
+        <Field label={t('common.notes')}>{id => <textarea id={id} disabled={locked} placeholder={t('common.optional')} value={note} onChange={e => setNote(e.target.value)} />}</Field>
         <div className="fld"><span className="lbl">{t('tx.receipt')}</span>
           <label className="drop" style={devMode ? { opacity: 0.6, cursor: 'not-allowed' } : undefined}>
             {file ? file.name : t('tx.receiptDrop')}
@@ -346,6 +357,7 @@ function TxForm({ tx, type, accounts, cards, onClose }: { tx: Tx | null; type: T
         {!tx && <button type="button" className="btn btn-2" disabled={busy} onClick={() => void save(true)}>{t('tx.saveAnother')}</button>}
         <button type="button" className="btn btn-1" disabled={busy} onClick={() => void save(false)}>{tx ? t('common.saveChanges') : t('common.save')}</button>
       </div>
+      {locked && <span className="muted" style={{ fontSize: 13 }}>{t('tx.retryReceiptNote')}</span>}
     </>
   );
 }
@@ -355,7 +367,7 @@ function DeleteTx({ tx, onClose }: { tx: Tx; onClose: () => void }) {
   const del = useDeleteTransaction();
   const [scope, setScope] = useState<DeleteScope>('one');
   return (
-    <ConfirmDelete title={t('tx.deleteTitle', { desc: tx.desc })} body={t('tx.deleteBody', { amount: money(tx.amount), date: date(tx.date) })} cta={t('common.delete')} onClose={onClose}
+    <ConfirmDelete title={t('tx.deleteTitle', { desc: txTitle(t, tx) })} body={t('tx.deleteBody', { amount: money(tx.amount), date: date(tx.date) })} cta={t('common.delete')} onClose={onClose}
       onConfirm={() => del.mutateAsync({ id: tx.id, scope })}>
       {tx.groupId && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
