@@ -395,5 +395,6 @@ export const ptBR: Record<Key, string> = {
   'auth.tempPasswordExpired': 'A senha temporária expirou. Peça uma nova ao administrador.',
   'auth.accountNotReady': 'Esta conta ainda não está pronta para entrar. Fale com o administrador.',
   'auth.passwordPolicy': 'Essa senha não atende aos requisitos (pelo menos 10 caracteres com maiúsculas, minúsculas e números).',
+  'goals.accountGone': 'A conta vinculada não existe mais; a meta será salva sem conta.',
   // @@keys-end
 };

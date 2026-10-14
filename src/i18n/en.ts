@@ -409,6 +409,7 @@ export const en = {
   'auth.tempPasswordExpired': 'The temporary password has expired. Ask the administrator for a new one.',
   'auth.accountNotReady': 'This account is not ready to sign in yet. Contact the administrator.',
   'auth.passwordPolicy': 'That password does not meet the requirements (at least 10 characters with upper case, lower case and numbers).',
+  'goals.accountGone': 'The linked account no longer exists; this goal will be saved without an account.',
   // @@keys-end
 } as const;
 

@@ -86,9 +86,12 @@ function GoalForm({ goal, onClose }: { goal: Goal | null; onClose: () => void })
   const [saved, setSaved] = useState(goal ? (goal.saved === 0 ? '0' : moneyInput(goal.saved)) : '');
   const [errs, setErrs] = useState<Errs>({});
 
-  const listed = (accounts.data ?? []).filter(a => !a.archived);
+  // non-archived accounts, plus the goal's own linked account when it is archived (keep the link, never silently drop it)
+  const all = accounts.data ?? [];
+  const listed = all.filter(a => !a.archived || a.id === goal?.accountId);
   const wanted = accountChoice ?? goal?.accountId ?? '';
   const accountId = listed.some(a => a.id === wanted) ? wanted : '';
+  const linkedGone = accounts.isSuccess && !!goal?.accountId && wanted === goal.accountId && !all.some(a => a.id === goal.accountId);
 
   const blocked = accounts.isPending || (accounts.isError && !!goal?.accountId);
 
@@ -114,8 +117,9 @@ function GoalForm({ goal, onClose }: { goal: Goal | null; onClose: () => void })
         <Field label={t('goals.name')} error={errs.name}>{id => <input id={id} placeholder={t('goals.namePh')} value={name} autoFocus onChange={e => setName(e.target.value)} />}</Field>
         <Field label={t('goals.account')}>{id => (
           <select id={id} value={accountId} onChange={e => setAccountChoice(e.target.value)}>
-            <option value="">{t('common.none')}</option>{listed.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+            <option value="">{t('common.none')}</option>{listed.map(a => <option key={a.id} value={a.id}>{a.archived ? `${a.name} · ${t('accounts.archivedBadge')}` : a.name}</option>)}
           </select>)}</Field>
+        {linkedGone && <p className="muted" style={{ margin: 0, fontSize: 13 }}>{t('goals.accountGone')}</p>}
         {accounts.isError && <div className="fld">
           <span className="err" role="alert">{errorMessage(accounts.error, t)}</span>
           <button type="button" className="btn btn-2" onClick={() => void accounts.refetch()}>{t('common.retry')}</button>

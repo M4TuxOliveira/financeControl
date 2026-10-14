@@ -132,7 +132,23 @@ describe('Goals', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Salvar alterações' }));
     expect(api.updateGoal).toHaveBeenCalledWith('g1', { name: 'Viagem', accountId: 'a2', target: 300000, targetDate: '2027-01', saved: 0 });
   });
-  it('linked account that is archived or unlisted falls back to none and is never submitted', async () => {
+  it('linked account that is archived stays selectable (marked archived) and the link is kept', async () => {
+    mockApi({
+      listGoals: [goal({ accountId: 'a2' })],
+      listAccounts: [account(), account({ id: 'a2', name: 'Caixinha', archived: true }), account({ id: 'a3', name: 'Velha', archived: true })],
+    });
+    vi.mocked(api.updateGoal).mockResolvedValue(goal());
+    renderWithProviders(<Goals />);
+    const card = (await screen.findByText('Viagem')).closest('section') as HTMLElement;
+    await userEvent.click(within(card).getByRole('button', { name: 'Editar' }));
+    await screen.findByRole('option', { name: 'Caixinha · Arquivada' });
+    expect(screen.getByLabelText('Conta poupança vinculada')).toHaveValue('a2');
+    expect(screen.queryByRole('option', { name: /Velha/ })).not.toBeInTheDocument();
+    expect(screen.queryByText(/não existe mais/)).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Salvar alterações' }));
+    expect(api.updateGoal).toHaveBeenCalledWith('g1', expect.objectContaining({ accountId: 'a2' }));
+  });
+  it('linked account that no longer exists falls back to none with a note and is never submitted', async () => {
     mockApi({
       listGoals: [goal({ accountId: 'gone' })],
       listAccounts: [account(), account({ id: 'a2', name: 'Caixinha', archived: true })],
@@ -143,7 +159,8 @@ describe('Goals', () => {
     await userEvent.click(within(card).getByRole('button', { name: 'Editar' }));
     await screen.findByRole('option', { name: 'Itaú' });
     expect(screen.getByLabelText('Conta poupança vinculada')).toHaveValue('');
-    expect(screen.queryByRole('option', { name: 'Caixinha' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: /Caixinha/ })).not.toBeInTheDocument();
+    expect(screen.getByText('A conta vinculada não existe mais; a meta será salva sem conta.')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Salvar alterações' }));
     expect(api.updateGoal).toHaveBeenCalledWith('g1', expect.objectContaining({ accountId: '' }));
   });
