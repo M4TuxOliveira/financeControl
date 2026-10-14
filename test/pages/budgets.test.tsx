@@ -62,6 +62,17 @@ describe('Budgets', () => {
     await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Excluir orçamento' }));
     expect(api.deleteBudget).toHaveBeenCalledWith('b1');
   });
+  it('editing a subcategory budget keeps its own category selected and sent unchanged', async () => {
+    mockApi({ listBudgets: [budget({ id: 'b3', categoryId: 'sys:food.delivery' })] });
+    vi.mocked(api.updateBudget).mockResolvedValue(budget());
+    renderWithProviders(<Budgets />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Editar' }));
+    const sel = screen.getByLabelText('Categoria') as HTMLSelectElement;
+    expect(sel.value).toBe('sys:food.delivery');
+    expect(sel.selectedOptions[0].textContent).toMatch(/Alimentação › /);
+    await userEvent.click(screen.getByRole('button', { name: 'Salvar alterações' }));
+    expect(api.updateBudget).toHaveBeenCalledWith('b3', expect.objectContaining({ categoryId: 'sys:food.delivery' }));
+  });
   it('empty state', async () => {
     mockApi();
     renderWithProviders(<Budgets />);

@@ -77,7 +77,12 @@ function BudgetForm({ budget, existing, onClose }: { budget: Budget | null; exis
   const cats = useCategoryLookup();
   const create = useCreateBudget();
   const update = useUpdateBudget();
-  const free = cats.tops.filter(c => c.id === budget?.categoryId || !existing.some(b => b.categoryId === c.id));
+  // tops without a budget, plus the edited budget's OWN category even when it is a subcategory (never silently re-point it)
+  const own = budget ? cats.categories.find(c => c.id === budget.categoryId) : undefined;
+  const free = [
+    ...(own && !cats.tops.includes(own) ? [own] : []),
+    ...cats.tops.filter(c => c.id === budget?.categoryId || !existing.some(b => b.categoryId === c.id)),
+  ];
   const [picked, setPicked] = useState(budget?.categoryId ?? '');
   // always a listed option; '' only when no free category exists
   const categoryId = free.some(c => c.id === picked) ? picked : free[0]?.id ?? '';
@@ -100,7 +105,7 @@ function BudgetForm({ budget, existing, onClose }: { budget: Budget | null; exis
       <div className="grid">
         <Field label={t('budgets.category')} error={catErr}>{id => (
           <select id={id} value={categoryId} onChange={e => setPicked(e.target.value)} disabled={!free.length}>
-            {free.length ? free.map(c => <option key={c.id} value={c.id}>{cats.name(c)}</option>) : <option value="">{t('budgets.allHave')}</option>}
+            {free.length ? free.map(c => <option key={c.id} value={c.id}>{c.parentId ? cats.label(c.id) : cats.name(c)}</option>) : <option value="">{t('budgets.allHave')}</option>}
           </select>)}</Field>
         <Field label={t('budgets.monthlyLimit')} error={limErr}>{id => <input id={id} inputMode="decimal" value={lim} onChange={e => setLim(e.target.value)} autoFocus />}</Field>
         <Field label={t('budgets.alertAt')}>{id => (
