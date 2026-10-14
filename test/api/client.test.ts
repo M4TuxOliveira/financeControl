@@ -82,14 +82,25 @@ describe('401 handling (review focus 3)', () => {
     for (const r of rs) expect(r).toMatchObject({ status: 'rejected', reason: { status: 401 } });
     expect(onAuthFailure).toHaveBeenCalledTimes(1);
   });
-  it('a rejecting refresh is treated as failed and still yields ApiError 401', async () => {
+  it('a throwing (transient) refresh rejects with NETWORK, keeps the session and does not retry', async () => {
     const onAuthFailure = vi.fn();
-    setTokenProvider({ getAccessToken: async () => 'old', refresh: async () => { throw new Error('boom'); }, onAuthFailure });
+    const refresh = vi.fn(async () => { throw new TypeError('Failed to fetch'); });
+    setTokenProvider({ getAccessToken: async () => 'old', refresh, onAuthFailure });
     fetchMock.mockResolvedValue(unauth());
     const err = await request('GET', '/me').catch((e: ApiError) => e) as ApiError;
     expect(err).toBeInstanceOf(ApiError);
-    expect(err.status).toBe(401);
-    expect(onAuthFailure).toHaveBeenCalledTimes(1);
+    expect(err).toMatchObject({ status: 0, code: 'NETWORK' });
+    expect(onAuthFailure).not.toHaveBeenCalled();
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+  it('a throwing (transient) getAccessToken rejects with NETWORK without sending unauthenticated', async () => {
+    const onAuthFailure = vi.fn();
+    setTokenProvider({ getAccessToken: async () => { throw new TypeError('Failed to fetch'); }, refresh: async () => 'new', onAuthFailure });
+    fetchMock.mockResolvedValue(json(200, { ok: true }));
+    await expect(request('GET', '/me')).rejects.toMatchObject({ status: 0, code: 'NETWORK' });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(onAuthFailure).not.toHaveBeenCalled();
   });
   it('late 401 retries with the already-refreshed token without refreshing again', async () => {
     const refresh = vi.fn(async () => 'other');

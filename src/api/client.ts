@@ -5,6 +5,7 @@ export class ApiError extends Error {
   }
 }
 
+/** getAccessToken/refresh THROW on transient errors (→ NETWORK ApiError, session kept); refresh null = invalid session. */
 export type TokenProvider = {
   getAccessToken(): Promise<string | null>;
   refresh(): Promise<string | null>;
@@ -19,6 +20,10 @@ export function setTokenProvider(p: TokenProvider | null) { provider = p; refres
 
 /** One refresh in flight at a time, shared by every parallel 401. */
 const refreshOnce = () => (refreshing ??= provider!.refresh().finally(() => { refreshing = null; }));
+
+const networkError = () => new ApiError(0, 'NETWORK', 'Network error');
+/** A thrown token/refresh call is transient ("could not refresh now"): surface NETWORK, never sign out. */
+const orNetwork = <T>(p: Promise<T>): Promise<T> => p.catch(() => { throw networkError(); });
 
 const base = () => (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
 
@@ -38,16 +43,16 @@ export async function request<T>(method: string, path: string, opts: { query?: R
     try {
       return await fetch(url, { method, headers, body: opts.body === undefined ? undefined : JSON.stringify(opts.body) });
     } catch {
-      throw new ApiError(0, 'NETWORK', 'Network error');
+      throw networkError();
     }
   };
 
-  const used = provider ? await provider.getAccessToken() : null;
+  const used = provider ? await orNetwork(provider.getAccessToken()) : null;
   let res = await send(used);
   if (res.status === 401 && provider && !(used !== null && used === failedFor)) {
     // A refresh may already have completed while this request was in flight.
-    const current = await provider.getAccessToken();
-    const fresh = current && current !== used ? current : await refreshOnce().catch(() => null);
+    const current = await orNetwork(provider.getAccessToken());
+    const fresh = current && current !== used ? current : await orNetwork(refreshOnce());
     if (fresh) res = await send(fresh);
     if (!fresh || res.status === 401) {
       const failed = fresh ?? used;

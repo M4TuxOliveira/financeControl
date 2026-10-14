@@ -2,19 +2,38 @@ import { AuthenticationDetails, CognitoUser, CognitoUserPool, type CognitoUserSe
 import { createDevBackend, DEV_AUTH } from './dev';
 import type { AuthBackend } from './types';
 
+/**
+ * A REAL invalid/expired session: Cognito rejected the refresh token or there is nothing usable stored. Everything else
+ * (NetworkError, TypeError 'Failed to fetch', timeouts, throttling, 5xx…) is transient and must not end the session.
+ */
+export function isInvalidSession(e: unknown): boolean {
+  const err = e as { name?: string; code?: string; message?: string } | null;
+  if (!err) return false;
+  if (err.name === 'NotAuthorizedException' || err.code === 'NotAuthorizedException') return true;
+  return /Refresh Token has expired|Invalid Refresh Token|invalid session|Please authenticate|Username is null/i.test(err.message ?? '');
+}
+
 const unsupported = (reject: (e: Error) => void) => () => reject(new Error('UNSUPPORTED_CHALLENGE'));
 
 export function createCognitoBackend(cfg: { userPoolId: string; clientId: string }): AuthBackend {
   const pool = new CognitoUserPool({ UserPoolId: cfg.userPoolId, ClientId: cfg.clientId });
   let pending: CognitoUser | null = null;
-  const session = (u: CognitoUser) => new Promise<CognitoUserSession | null>(res => u.getSession((e: Error | null, s: CognitoUserSession | null) => res(e ? null : s)));
+  /**
+   * Resolves the session, `null` when it is really invalid/expired (or missing), and REJECTS with the original error
+   * on anything transient (offline, timeout, 5xx…) so callers never mistake a network blip for a dead session.
+   */
+  const session = (u: CognitoUser) => new Promise<CognitoUserSession | null>((res, rej) => u.getSession((e: Error | null, s: CognitoUserSession | null) => {
+    if (e) return isInvalidSession(e) ? res(null) : rej(e);
+    res(s && typeof s.isValid === 'function' && s.isValid() ? s : null);
+  }));
 
   return {
     async restore() {
       const u = pool.getCurrentUser();
       if (!u) return false;
-      const s = await session(u);
-      if (!s || !s.isValid()) { u.signOut(); return false; }
+      let s: CognitoUserSession | null;
+      try { s = await session(u); } catch { return true; } // transient: keep the stored session, the API call retries
+      if (!s) { u.signOut(); return false; }
       return true;
     },
     signIn(email, password) {
@@ -52,12 +71,16 @@ export function createCognitoBackend(cfg: { userPoolId: string; clientId: string
       return s ? s.getAccessToken().getJwtToken() : null;
     },
     refresh() {
-      return new Promise(resolve => {
+      return new Promise((resolve, reject) => {
         const u = pool.getCurrentUser();
         if (!u) return resolve(null);
         u.getSession((e: Error | null, s: CognitoUserSession | null) => {
-          if (e || !s) return resolve(null);
-          u.refreshSession(s.getRefreshToken(), (e2: Error | null, s2: CognitoUserSession | null) => resolve(e2 || !s2 ? null : s2.getAccessToken().getJwtToken()));
+          if (e) return isInvalidSession(e) ? resolve(null) : reject(e);
+          if (!s) return resolve(null);
+          u.refreshSession(s.getRefreshToken(), (e2: Error | null, s2: CognitoUserSession | null) => {
+            if (e2) return isInvalidSession(e2) ? resolve(null) : reject(e2);
+            resolve(s2 ? s2.getAccessToken().getJwtToken() : null);
+          });
         });
       });
     },
