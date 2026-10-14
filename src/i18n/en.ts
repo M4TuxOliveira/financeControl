@@ -124,6 +124,22 @@ export const en = {
   'app.title': 'financeControl PRO',
   'shell.splash': 'Loading your data…',
   'shell.profileError': 'Could not load your profile.',
+  // overview
+  'overview.hi': 'Hi, {name}',
+  'overview.totalBalance': 'Total balance',
+  'overview.income': 'Income · {month}',
+  'overview.expenses': 'Expenses · {month}',
+  'overview.openStatements': 'Open card statements',
+  'overview.recent': 'Recent transactions',
+  'overview.noAccounts': 'No accounts yet.',
+  'overview.addAccount': 'Add your first account',
+  'overview.noBudgets': 'No budgets yet.',
+  'overview.createBudget': 'Create one',
+  'overview.noGoals': 'No goals yet.',
+  'overview.setGoal': 'Set a goal',
+  'overview.noTx': 'Nothing recorded yet.',
+  'overview.addTx': 'Add a transaction',
+  'overview.noDate': 'no date',
   // @@keys-end
 } as const;
 

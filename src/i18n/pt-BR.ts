@@ -120,5 +120,21 @@ export const ptBR: Record<Key, string> = {
   'app.title': 'financeControl PRO',
   'shell.splash': 'Carregando seus dados…',
   'shell.profileError': 'Não foi possível carregar seu perfil.',
+  // overview
+  'overview.hi': 'Olá, {name}',
+  'overview.totalBalance': 'Saldo total',
+  'overview.income': 'Receitas · {month}',
+  'overview.expenses': 'Despesas · {month}',
+  'overview.openStatements': 'Faturas de cartão em aberto',
+  'overview.recent': 'Transações recentes',
+  'overview.noAccounts': 'Nenhuma conta ainda.',
+  'overview.addAccount': 'Adicione sua primeira conta',
+  'overview.noBudgets': 'Nenhum orçamento ainda.',
+  'overview.createBudget': 'Criar um',
+  'overview.noGoals': 'Nenhuma meta ainda.',
+  'overview.setGoal': 'Definir uma meta',
+  'overview.noTx': 'Nada registrado ainda.',
+  'overview.addTx': 'Adicionar uma transação',
+  'overview.noDate': 'sem data',
   // @@keys-end
 };
