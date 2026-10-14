@@ -90,7 +90,10 @@ function GoalForm({ goal, onClose }: { goal: Goal | null; onClose: () => void })
   const wanted = accountChoice ?? goal?.accountId ?? '';
   const accountId = listed.some(a => a.id === wanted) ? wanted : '';
 
+  const blocked = accounts.isPending || (accounts.isError && !!goal?.accountId);
+
   const save = async () => {
+    if (blocked) return;
     if (!name.trim()) return setErrs({ name: t('goals.nameRequired') });
     const tgt = parseMoney(target);
     if (!tgt) return setErrs({ target: t('goals.targetRequired') });
@@ -108,18 +111,23 @@ function GoalForm({ goal, onClose }: { goal: Goal | null; onClose: () => void })
   return (
     <Modal title={goal ? t('goals.formEdit') : t('goals.new')} onClose={onClose}>
       <div className="grid">
-        <Field label={t('goals.name')} error={errs.name ?? errs.server}>{id => <input id={id} placeholder={t('goals.namePh')} value={name} autoFocus onChange={e => setName(e.target.value)} />}</Field>
+        <Field label={t('goals.name')} error={errs.name}>{id => <input id={id} placeholder={t('goals.namePh')} value={name} autoFocus onChange={e => setName(e.target.value)} />}</Field>
         <Field label={t('goals.account')}>{id => (
           <select id={id} value={accountId} onChange={e => setAccountChoice(e.target.value)}>
             <option value="">{t('common.none')}</option>{listed.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
           </select>)}</Field>
+        {accounts.isError && <div className="fld">
+          <span className="err" role="alert">{errorMessage(accounts.error, t)}</span>
+          <button type="button" className="btn btn-2" onClick={() => void accounts.refetch()}>{t('common.retry')}</button>
+        </div>}
         <Field label={t('goals.target')} error={errs.target}>{id => <input id={id} inputMode="decimal" value={target} onChange={e => setTarget(e.target.value)} />}</Field>
         <Field label={t('goals.targetMonth')}>{id => <input id={id} type="month" value={targetDate} onChange={e => setTargetDate(e.target.value)} />}</Field>
         <Field label={t('goals.alreadySaved')} error={errs.saved}>{id => <input id={id} inputMode="decimal" value={saved} onChange={e => setSaved(e.target.value)} />}</Field>
       </div>
+      {errs.server && <p className="err" role="alert" style={{ margin: 0 }}>{errs.server}</p>}
       <div className="footer">
         <button type="button" className="btn btn-2" onClick={onClose}>{t('common.cancel')}</button>
-        <button type="button" className="btn btn-1" disabled={!accounts.data} onClick={() => void save()}>{goal ? t('common.saveChanges') : t('goals.createCta')}</button>
+        <button type="button" className="btn btn-1" disabled={blocked} onClick={() => void save()}>{goal ? t('common.saveChanges') : t('goals.createCta')}</button>
       </div>
     </Modal>
   );
@@ -143,6 +151,7 @@ function AddMoney({ goal, onClose }: { goal: Goal; onClose: () => void }) {
     const amount = parseMoney(amt);
     if (amount === null) return setErr(t('common.invalidAmount'));
     if (amount === 0) return setErr(t('cards.amountRequired'));
+    if (!accounts.data) return;
     if (!from) return setErr(t('goals.needAccount'));
     try { await contribute.mutateAsync({ id: goal.id, body: { amount, fromAccountId: from } }); onClose(); } catch (e) { setErr(errorMessage(e, t)); }
   };
@@ -156,12 +165,16 @@ function AddMoney({ goal, onClose }: { goal: Goal; onClose: () => void }) {
             {list.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
           </select>)}</Field>
       </div>
+      {accounts.isError && <div className="fld">
+        <span className="err" role="alert">{errorMessage(accounts.error, t)}</span>
+        <button type="button" className="btn btn-2" onClick={() => void accounts.refetch()}>{t('common.retry')}</button>
+      </div>}
       <p className="muted" style={{ margin: 0, fontSize: 13 }}>
         {from && goal.accountId && from !== goal.accountId ? t('goals.noteTransfer', { account: acc.name(goal.accountId) }) : t('goals.noteLocal')}
       </p>
       <div className="footer">
         <button type="button" className="btn btn-2" onClick={onClose}>{t('common.cancel')}</button>
-        <button type="button" className="btn btn-1" onClick={() => void submit()}>{t('goals.addCta')}</button>
+        <button type="button" className="btn btn-1" disabled={!accounts.data} onClick={() => void submit()}>{t('goals.addCta')}</button>
       </div>
     </Modal>
   );

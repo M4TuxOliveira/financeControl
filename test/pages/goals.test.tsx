@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../../src/api/endpoints';
@@ -185,5 +185,72 @@ describe('Goals', () => {
     await userEvent.click(within(dlg).getByRole('button', { name: 'Adicionar à meta' }));
     expect(within(dlg).getByText('Adicione uma conta primeiro.')).toBeInTheDocument();
     expect(api.contributeGoal).not.toHaveBeenCalled();
+  });
+  it('accounts query failing does not block creating a goal', async () => {
+    vi.mocked(api.listAccounts).mockRejectedValue(new Error('boom'));
+    vi.mocked(api.createGoal).mockResolvedValue(goal());
+    renderWithProviders(<Goals />);
+    await userEvent.click(await screen.findByRole('button', { name: /Nova meta/ }));
+    const dlg = await screen.findByRole('dialog');
+    await within(dlg).findByRole('button', { name: 'Tentar novamente' });
+    const create = within(dlg).getByRole('button', { name: 'Criar meta' });
+    expect(create).toBeEnabled();
+    await userEvent.type(within(dlg).getByLabelText('Nome da meta'), 'X');
+    await userEvent.type(within(dlg).getByLabelText('Valor alvo'), '1000');
+    await userEvent.click(create);
+    expect(api.createGoal).toHaveBeenCalledWith({ name: 'X', accountId: '', target: 100000, targetDate: '', saved: 0 });
+  });
+  it('accounts failing blocks editing a linked goal until retry succeeds', async () => {
+    vi.mocked(api.listAccounts).mockRejectedValue(new Error('boom'));
+    renderWithProviders(<Goals />);
+    const card = (await screen.findByText('Viagem')).closest('section') as HTMLElement;
+    await userEvent.click(within(card).getByRole('button', { name: 'Editar' }));
+    const dlg = screen.getByRole('dialog');
+    const retry = await within(dlg).findByRole('button', { name: 'Tentar novamente' });
+    expect(within(dlg).getAllByRole('alert').length).toBeGreaterThan(0);
+    expect(within(dlg).getByRole('button', { name: 'Salvar alterações' })).toBeDisabled();
+    vi.mocked(api.listAccounts).mockResolvedValue([account(), account({ id: 'a2', name: 'Caixinha' })]);
+    await userEvent.click(retry);
+    await waitFor(() => expect(within(dlg).getByRole('button', { name: 'Salvar alterações' })).toBeEnabled());
+  });
+  it('accounts pending disables Save', async () => {
+    vi.mocked(api.listAccounts).mockReturnValue(new Promise(() => {}));
+    renderWithProviders(<Goals />);
+    await userEvent.click(await screen.findByRole('button', { name: /Nova meta/ }));
+    expect(within(screen.getByRole('dialog')).getByRole('button', { name: 'Criar meta' })).toBeDisabled();
+  });
+  it('add money with accounts pending disables Add and shows no needAccount', async () => {
+    vi.mocked(api.listAccounts).mockReturnValue(new Promise(() => {}));
+    renderWithProviders(<Goals />);
+    const card = (await screen.findByText('Viagem')).closest('section') as HTMLElement;
+    await userEvent.click(within(card).getByRole('button', { name: 'Adicionar dinheiro' }));
+    const dlg = screen.getByRole('dialog');
+    expect(within(dlg).getByRole('button', { name: 'Adicionar à meta' })).toBeDisabled();
+    expect(within(dlg).queryByText('Adicione uma conta primeiro.')).not.toBeInTheDocument();
+  });
+  it('add money with accounts failing shows error and retry', async () => {
+    vi.mocked(api.listAccounts).mockRejectedValue(new Error('boom'));
+    renderWithProviders(<Goals />);
+    const card = (await screen.findByText('Viagem')).closest('section') as HTMLElement;
+    await userEvent.click(within(card).getByRole('button', { name: 'Adicionar dinheiro' }));
+    const dlg = screen.getByRole('dialog');
+    expect(await within(dlg).findByRole('button', { name: 'Tentar novamente' })).toBeInTheDocument();
+    expect(within(dlg).getByRole('button', { name: 'Adicionar à meta' })).toBeDisabled();
+  });
+  it('add money with a loaded empty list shows needAccount', async () => {
+    mockApi({ listGoals: [goal()], listAccounts: [] });
+    renderWithProviders(<Goals />);
+    const card = (await screen.findByText('Viagem')).closest('section') as HTMLElement;
+    await userEvent.click(within(card).getByRole('button', { name: 'Adicionar dinheiro' }));
+    const dlg = screen.getByRole('dialog');
+    await waitFor(() => expect(within(dlg).getByRole('button', { name: 'Adicionar à meta' })).toBeEnabled());
+    await userEvent.type(within(dlg).getByLabelText('Valor'), '10');
+    await userEvent.click(within(dlg).getByRole('button', { name: 'Adicionar à meta' }));
+    expect(within(dlg).getByText('Adicione uma conta primeiro.')).toBeInTheDocument();
+  });
+  it('reached goal with a linked account shows the account', async () => {
+    mockApi({ listGoals: [goal({ left: 0, pct: 100, saved: 300000 })], listAccounts: [account({ id: 'a2', name: 'Caixinha' })] });
+    renderWithProviders(<Goals />);
+    expect(await screen.findByText('Meta atingida · em Caixinha')).toBeInTheDocument();
   });
 });
