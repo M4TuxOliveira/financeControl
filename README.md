@@ -65,8 +65,13 @@ Copy `.env.example` to `.env.local`. All values are baked in at build time.
 `npm run build` produces plain static files in `dist/` (hash routing, relative asset paths), so any static host works
 (Cloudflare Pages, Netlify, Vercel, GitHub Pages). Set the `VITE_*` variables in the host's build environment
 (never `VITE_DEV_AUTH`), and add the site's origin to the backend's `frontendOrigins` in `serverless.yml`, then redeploy
-the backend. The GitHub Pages workflow (`.github/workflows/deploy.yml`) builds on push to `main`; give its build step
-the `VITE_*` values (e.g. repository variables) before relying on it.
+the backend.
+
+The GitHub Pages workflow (`.github/workflows/deploy.yml`) builds on push to `main` and reads the configuration from
+**repository variables** (not secrets: these are public client ids baked into the bundle). Add them under
+Settings → Secrets and variables → Actions → Variables: `VITE_API_URL`, `VITE_COGNITO_USER_POOL_ID`,
+`VITE_COGNITO_CLIENT_ID` (required: the workflow fails with a message naming any that is empty) and `VITE_COGNITO_REGION`.
+Never add `VITE_DEV_AUTH`; the workflow never sets it.
 
 Legacy data: the pre-API version kept everything in the browser's localStorage. On first sign-in to an empty account,
 **Configurações → Importar deste navegador** uploads it once.

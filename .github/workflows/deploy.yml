@@ -20,7 +20,27 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm run build
+      - name: Check build configuration
+        env:
+          VITE_API_URL: ${{ vars.VITE_API_URL }}
+          VITE_COGNITO_USER_POOL_ID: ${{ vars.VITE_COGNITO_USER_POOL_ID }}
+          VITE_COGNITO_CLIENT_ID: ${{ vars.VITE_COGNITO_CLIENT_ID }}
+        run: |
+          missing=0
+          for name in VITE_API_URL VITE_COGNITO_USER_POOL_ID VITE_COGNITO_CLIENT_ID; do
+            if ! test -n "${!name}"; then
+              echo "::error::Repository variable $name is empty. Add it under Settings → Secrets and variables → Actions → Variables."
+              missing=1
+            fi
+          done
+          test "$missing" -eq 0
+      - name: Build
+        env:
+          VITE_API_URL: ${{ vars.VITE_API_URL }}
+          VITE_COGNITO_USER_POOL_ID: ${{ vars.VITE_COGNITO_USER_POOL_ID }}
+          VITE_COGNITO_CLIENT_ID: ${{ vars.VITE_COGNITO_CLIENT_ID }}
+          VITE_COGNITO_REGION: ${{ vars.VITE_COGNITO_REGION }}
+        run: npm run build
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
