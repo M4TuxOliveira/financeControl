@@ -59,7 +59,7 @@ Copy `.env.example` to `.env.local`. All values are baked in at build time.
 |---|---|
 | `VITE_API_URL` | API base URL without `/v1` (the backend's `HttpApiUrl` output; `http://localhost:3000` locally) |
 | `VITE_COGNITO_USER_POOL_ID`, `VITE_COGNITO_CLIENT_ID`, `VITE_COGNITO_REGION` | Backend stack outputs (`UserPoolId`, `UserPoolClientId`) and region |
-| `VITE_DEV_AUTH` | `true` = developer login with unsigned tokens. **Local only**: a production build refuses to run with it |
+| `VITE_DEV_AUTH` | `true` = developer login with unsigned tokens. **Local only**: production mode and any non-`development` build refuse to run with it |
 
 ## Deploy (static site)
 `npm run build` produces plain static files in `dist/` (hash routing, relative asset paths), so any static host works

@@ -37,7 +37,7 @@ DynamoDB + Cognito; serverless-offline locally). The server owns the data and ev
   block silently.
 - Dates are `yyyy-mm-dd` strings; "today" comes from `useI18n().today` (user's time zone). UI copy only via `t()`.
 - Hash routing and `base: './'` keep the build host-agnostic; don't switch to history routing.
-- `VITE_DEV_AUTH` must never reach a production build (`vite.env-guard.ts` throws).
+- `VITE_DEV_AUTH` must never reach a deployable build (`vite.env-guard.ts` throws in production mode and in any non-`development` build).
 - Styling: one `src/styles.css` with CSS variables; reuse existing classes (`.card`, `.btn-1/2`, `.fld`, `.trow`, `.modal`).
   Accessible forms: real labels via `Field`, `type="button"`, `aria-label` on icon buttons.
 

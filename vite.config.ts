@@ -4,8 +4,8 @@ import react from '@vitejs/plugin-react';
 import { assertSafeEnv } from './vite.env-guard';
 
 // base './' keeps asset URLs relative so the build works on any static host.
-export default defineConfig(({ mode }) => {
-  assertSafeEnv(mode, loadEnv(mode, process.cwd(), ''));
+export default defineConfig(({ mode, command }) => {
+  assertSafeEnv(mode, loadEnv(mode, process.cwd(), ''), command);
   return {
     base: './',
     plugins: [react()],
