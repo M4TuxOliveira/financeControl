@@ -101,6 +101,24 @@ export const en = {
   'categories.income': 'Income',
   'categories.income.salary': 'Salary',
   'categories.income.other_income': 'Other income',
+  // auth
+  'auth.title': 'Sign in',
+  'auth.email': 'Email',
+  'auth.password': 'Password',
+  'auth.signIn': 'Sign in',
+  'auth.signingIn': 'Signing in…',
+  'auth.invalidCredentials': 'Wrong email or password.',
+  'auth.devTitle': 'Developer sign-in',
+  'auth.devUserId': 'Dev user id',
+  'auth.devEnter': 'Enter as dev user',
+  'auth.devBanner': 'DEV AUTH — local testing only',
+  'auth.invalidDevId': 'Use 1–40 letters, digits, "-" or "_".',
+  'auth.newPasswordTitle': 'Choose a new password',
+  'auth.newPasswordHint': 'This account needs a permanent password before you can continue.',
+  'auth.newPassword': 'New password',
+  'auth.setPassword': 'Set password',
+  'auth.sessionExpired': 'Your session expired. Please sign in again.',
+  'auth.configMissing': 'Cognito is not configured (missing VITE_COGNITO_* variables).',
   // @@keys-end
 } as const;
 
