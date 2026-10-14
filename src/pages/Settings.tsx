@@ -34,6 +34,7 @@ export function Settings() {
     try { setResult(await imp.mutateAsync(legacy!.state)); } catch (e) { setErr(errorMessage(e, t)); }
   };
   const zones = ZONES.includes(timezone) ? ZONES : [timezone, ...ZONES];
+  const currencies = CURRENCIES.includes(currency) ? CURRENCIES : [currency, ...CURRENCIES];
 
   return (
     <>
@@ -55,7 +56,7 @@ export function Settings() {
             <select id={id} disabled={update.isPending} value={locale} onChange={e => save({ locale: e.target.value as Locale })}>
               <option value="pt-BR">Português (Brasil)</option><option value="en">English</option>
             </select>)}</Field>
-          <Field label={t('settings.currency')}>{id => <select id={id} disabled={update.isPending} value={currency} onChange={e => save({ currency: e.target.value })}>{CURRENCIES.map(c => <option key={c}>{c}</option>)}</select>}</Field>
+          <Field label={t('settings.currency')}>{id => <select id={id} disabled={update.isPending} value={currency} onChange={e => save({ currency: e.target.value })}>{currencies.map(c => <option key={c}>{c}</option>)}</select>}</Field>
           <Field label={t('settings.timezone')}>{id => <select id={id} disabled={update.isPending} value={timezone} onChange={e => save({ timezone: e.target.value })}>{zones.map(z => <option key={z}>{z}</option>)}</select>}</Field>
         </div>
         {saved && <span className="muted" role="status">{t('settings.saved')}</span>}

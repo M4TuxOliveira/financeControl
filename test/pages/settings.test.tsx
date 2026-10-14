@@ -19,6 +19,15 @@ describe('Settings', () => {
     await userEvent.selectOptions(await screen.findByLabelText('Idioma'), 'en');
     expect(api.putMe).toHaveBeenCalledWith({ locale: 'en', currency: 'BRL', timezone: 'America/Sao_Paulo' });
   });
+  it('an unlisted profile currency is prepended and kept selected (never shown as another currency)', async () => {
+    vi.mocked(api.putMe).mockResolvedValue({ locale: 'pt-BR', currency: 'GBP', timezone: 'UTC' });
+    renderWithProviders(<Settings />, { currency: 'GBP' });
+    const sel = await screen.findByLabelText('Moeda') as HTMLSelectElement;
+    expect([...sel.options].map(o => o.value)).toEqual(['GBP', 'BRL', 'USD', 'EUR']);
+    expect(sel.value).toBe('GBP');
+    await userEvent.selectOptions(screen.getByLabelText('Fuso horário'), 'UTC');
+    expect(api.putMe).toHaveBeenLastCalledWith({ locale: 'pt-BR', currency: 'GBP', timezone: 'UTC' });
+  });
   it('currency and timezone changes keep the other values', async () => {
     vi.mocked(api.putMe).mockResolvedValue({ locale: 'pt-BR', currency: 'USD', timezone: 'UTC' });
     renderWithProviders(<Settings />);
