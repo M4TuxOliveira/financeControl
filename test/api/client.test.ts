@@ -72,4 +72,44 @@ describe('401 handling (review focus 3)', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(onAuthFailure).toHaveBeenCalledTimes(1);
   });
+
+  const unauth = () => json(401, { error: { code: 'UNAUTHENTICATED', message: 'x' } });
+  it('parallel 401s with a failed refresh sign out exactly once', async () => {
+    const onAuthFailure = vi.fn();
+    setTokenProvider({ getAccessToken: async () => 'old', refresh: async () => { await new Promise(r => setTimeout(r, 5)); return null; }, onAuthFailure });
+    fetchMock.mockImplementation(async () => unauth());
+    const rs = await Promise.allSettled([request('GET', '/a'), request('GET', '/b'), request('GET', '/c')]);
+    for (const r of rs) expect(r).toMatchObject({ status: 'rejected', reason: { status: 401 } });
+    expect(onAuthFailure).toHaveBeenCalledTimes(1);
+  });
+  it('a rejecting refresh is treated as failed and still yields ApiError 401', async () => {
+    const onAuthFailure = vi.fn();
+    setTokenProvider({ getAccessToken: async () => 'old', refresh: async () => { throw new Error('boom'); }, onAuthFailure });
+    fetchMock.mockResolvedValue(unauth());
+    const err = await request('GET', '/me').catch((e: ApiError) => e) as ApiError;
+    expect(err).toBeInstanceOf(ApiError);
+    expect(err.status).toBe(401);
+    expect(onAuthFailure).toHaveBeenCalledTimes(1);
+  });
+  it('late 401 retries with the already-refreshed token without refreshing again', async () => {
+    const refresh = vi.fn(async () => 'other');
+    const getAccessToken = vi.fn().mockResolvedValueOnce('old').mockResolvedValue('new');
+    setTokenProvider({ getAccessToken, refresh, onAuthFailure: vi.fn() });
+    fetchMock.mockResolvedValueOnce(unauth()).mockResolvedValueOnce(json(200, { ok: true }));
+    expect(await request('GET', '/me')).toEqual({ ok: true });
+    expect(fetchMock.mock.calls[1][1].headers.Authorization).toBe('Bearer new');
+    expect(refresh).not.toHaveBeenCalled();
+  });
+  it('a different failing token signs out again', async () => {
+    const onAuthFailure = vi.fn();
+    let tok = 'old';
+    setTokenProvider({ getAccessToken: async () => tok, refresh: async () => null, onAuthFailure });
+    fetchMock.mockImplementation(async () => unauth());
+    await request('GET', '/a').catch(() => {});
+    await request('GET', '/b').catch(() => {});
+    expect(onAuthFailure).toHaveBeenCalledTimes(1);
+    tok = 'fresh';
+    await request('GET', '/c').catch(() => {});
+    expect(onAuthFailure).toHaveBeenCalledTimes(2);
+  });
 });

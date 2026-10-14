@@ -13,8 +13,9 @@ export type TokenProvider = {
 
 let provider: TokenProvider | null = null;
 let refreshing: Promise<string | null> | null = null;
+let failedFor: string | null = null;
 
-export function setTokenProvider(p: TokenProvider | null) { provider = p; refreshing = null; }
+export function setTokenProvider(p: TokenProvider | null) { provider = p; refreshing = null; failedFor = null; }
 
 /** One refresh in flight at a time, shared by every parallel 401. */
 const refreshOnce = () => (refreshing ??= provider!.refresh().finally(() => { refreshing = null; }));
@@ -41,11 +42,20 @@ export async function request<T>(method: string, path: string, opts: { query?: R
     }
   };
 
-  let res = await send(provider ? await provider.getAccessToken() : null);
-  if (res.status === 401 && provider) {
-    const fresh = await refreshOnce();
+  const used = provider ? await provider.getAccessToken() : null;
+  let res = await send(used);
+  if (res.status === 401 && provider && !(used !== null && used === failedFor)) {
+    // A refresh may already have completed while this request was in flight.
+    const current = await provider.getAccessToken();
+    const fresh = current && current !== used ? current : await refreshOnce().catch(() => null);
     if (fresh) res = await send(fresh);
-    if (res.status === 401 || !fresh) provider.onAuthFailure();
+    if (!fresh || res.status === 401) {
+      const failed = fresh ?? used;
+      if (failed === null || failed !== failedFor) {
+        failedFor = failed;
+        provider.onAuthFailure();
+      }
+    }
   }
   if (res.status === 204) return undefined as T;
   const text = await res.text();

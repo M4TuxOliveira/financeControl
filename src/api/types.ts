@@ -23,10 +23,12 @@ export type Card = Stamped & {
   id: string; name: string; network: string; limit: number; closeDay: number; dueDay: number; color: string; payAccountId: string;
   used: number; statements: Statement[];
 };
+export type CreatedCard = Omit<Card, 'statements'>;
 export type Category = Stamped & {
   id: string; name: string; parentId: string | null; icon: string; color: string; system: boolean; key?: string;
 };
 export type Budget = Stamped & { id: string; categoryId: string; limit: number; alertPct: number; spent: number; pct: number };
+export type SavedBudget = Omit<Budget, 'spent' | 'pct'>;
 export type Goal = Stamped & {
   id: string; name: string; accountId: string; target: number; targetDate: string; saved: number;
   pct: number; left: number; monthsLeft: number; monthlyNeeded: number | null;
