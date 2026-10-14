@@ -1,37 +1,50 @@
-# financeControl PRO
+# financeControl PRO (frontend)
 
-Personal finance tracker. Static React SPA, no backend; all data lives in the browser's localStorage. Deployed free as static files (`dist/`).
+Personal finance tracker. Static React SPA backed by the financeControl API (`../financeControlBackend`: Lambda +
+DynamoDB + Cognito; serverless-offline locally). The server owns the data and every derived number; the client renders.
 
 ## Commands
-- `npm run dev` — Vite dev server
-- `npm run build` — `tsc --noEmit && vite build` (the type check is the only automated check; there are no tests)
-- `npm run preview` — serve the built `dist/`
-
-## Stack and constraints
-- Vite + React 18 + TypeScript (strict). No router, state or UI libraries — keep dependencies minimal.
-- Hash routing (`#/transactions`) and `base: './'` in `vite.config.ts` so the build works on any static host without server config. Don't switch to history routing or absolute asset paths.
-- Styling is one hand-written `src/styles.css` using CSS variables for light/dark (`data-theme` on `<html>`). No CSS framework.
-- The UI originates from the "financeControl PRO" design artifact (Space Grotesk + IBM Plex Sans, dark hero cards, green `--btn`, lime `--accent`). Match existing tokens and classes (`.card`, `.btn-1/2/3`, `.fld`, `.trow`, `.modal`) rather than adding inline one-offs.
-- Desktop (sidebar) and mobile (bottom tab bar, modals become bottom sheets) are the same components, switched at `max-width: 900px`.
+- `npm test` — Vitest (jsdom) unit/component tests in `test/`
+- `npm run build` — `tsc --noEmit && vite build` (`tsc` also covers `test/`, `e2e/`, `playwright.config.ts`)
+- `npm run dev:local` — Vite with dev auth against `http://localhost:3000`
+- `npm run stack` — dynalite :8000 + backend :3000 + Vite :5173 (`scripts/stack.sh`; Docker-free; `DB=docker` for
+  DynamoDB Local; `BACKEND_DIR` if the backend is not at `../financeControlBackend`; Ctrl-C stops all)
+- `npm run e2e` — Playwright scenario `e2e/flow.spec.ts`; needs `npm run stack` running. Use fresh dev user ids.
 
 ## Architecture (`src/`)
-- `types.ts` — all data types (`State` is the whole persisted document, `v: 1`).
-- `store.ts` — module-level state + `useStore()` via `useSyncExternalStore`; `update(fn)` persists to localStorage key `financeControl:v1`. Also `freshState()` (default categories).
-- `actions.ts` — every mutation (save/delete per entity, `createTransactions`, `deleteTx` scopes, `payStatement`, `contribute`). Pages call these; don't mutate state inside components.
-- `lib.ts` — pure helpers: money, dates, balances, card statement math, budget math. Put new derived-data logic here.
-- `pages/*.tsx` — one file per route; forms and delete-confirm modals live in the same file as their page. `ui.tsx` has shared primitives (`Modal`, `Field`, `Bar`, `Swatches`, `ConfirmDelete`).
+- `api/` — `client.ts` (fetch, bearer token, error envelope → `ApiError`), `endpoints.ts` (one function per route),
+  `types.ts` (wire types: cents, `yyyy-mm-dd`, `yyyy-mm`), `receipt.ts` (S3 presigned upload).
+- `queries/` — TanStack Query hooks per resource + mutations with invalidation (`keys.ts`), `lookups.ts` (id → name/color).
+  Data flows `api/ → queries/ → pages/`; pages never call `api/` directly.
+- `auth/` — `AuthProvider` (Cognito via `amazon-cognito-identity-js`, or dev auth when `VITE_DEV_AUTH=true`:
+  unsigned token from `dev.ts`, DEV banner), `LoginPage` (incl. new-password challenge).
+- `i18n/` — `en.ts` + `pt-BR.ts` catalogs (`pt-BR` is typed `Record<Key, string>`, so a key missing in either fails
+  the build/tests). Add new keys **immediately before the `// @@keys-end` line** in both. `format.ts`: locale-aware
+  money/date/parse helpers exposed by `useI18n()`; `errors.ts` maps API error codes to messages.
+- `pages/*.tsx` — one per hash route (`#/accounts`), forms and confirm dialogs in the same file; `components/QueryState`
+  renders loading/error(+retry)/empty/data. `ui.tsx` has shared primitives (`Modal`, `Field`, `Bar`, `PageHead`…).
+- `prefs.ts` — local-only prefs (theme, display name). `legacy.ts` — reads the old localStorage document for import.
+- `store.ts`, `actions.ts`, `lib.ts`, `types.ts` — the pre-API localStorage app; not imported by the app anymore. Do not extend.
 
-## Domain rules (easy to get wrong)
-- **Money is integer cents** everywhere. Convert only at the edges with `parseMoney` / `moneyInput` / `money`. Display locale is pt-BR / BRL; UI copy is English.
-- **Dates are ISO `yyyy-mm-dd` strings** in local time; use the helpers in `lib.ts` (`addMonths` clamps the day). Never `new Date(iso)` without `T00:00:00`.
-- A transaction's `accountId` may be an account **or a credit card id**. Card purchases don't change any account balance. A `transfer` whose `toId` is a card is a statement payment.
-- Account balances count only transactions dated on or before today; future-dated (scheduled/recurring/installment) entries are excluded.
-- Statement key = closing month; a purchase after `closeDay` lands in the next month's statement. Payments settle the oldest statements first (`cardStatements`). Card "used" includes future installments.
-- Installments and repeats are **materialized** as separate transactions sharing a `groupId` (repeat: 26 weekly / 12 monthly / 3 yearly). Editing changes one entry; deleting offers one / future / all.
-- Budgets count a category together with its subcategories. Deleting a category reassigns its transactions and removes its budgets.
-- Changing the persisted shape requires bumping `State.v` and migrating in `store.ts` `load()`; today an unknown version silently resets to empty state.
+## Rules
+- **Never recompute server-derived values** (balances, card used/statements, budget pct, goal progress, totals). Render
+  what the API returns; invalidate queries after mutations.
+- **Money is integer cents** on the wire. Parse input with `parseMoney`/`parseSigned` from `useI18n()`: a `null` result
+  is an error shown on the field — never a silent `?? 0`. Edit forms initialize a zero amount as `'0'` (not `''`), so
+  saving without touching it keeps 0 instead of failing or nulling.
+- Selects only ever hold a **listed** option: derive the effective value from the current list (fallback to the first
+  valid one or `''`), never keep a stale id.
+- Forms that depend on lists (accounts, cards, categories) handle loading, error (+ retry) and empty explicitly; never
+  block silently.
+- Dates are `yyyy-mm-dd` strings; "today" comes from `useI18n().today` (user's time zone). UI copy only via `t()`.
+- Hash routing and `base: './'` keep the build host-agnostic; don't switch to history routing.
+- `VITE_DEV_AUTH` must never reach a production build (`vite.env-guard.ts` throws).
+- Styling: one `src/styles.css` with CSS variables; reuse existing classes (`.card`, `.btn-1/2`, `.fld`, `.trow`, `.modal`).
+  Accessible forms: real labels via `Field`, `type="button"`, `aria-label` on icon buttons.
 
-## Conventions
-- Never put real or personal financial data in the repo; `Settings → Load sample data` is the demo seed.
-- Keep forms accessible: real `<label>` + input (use `Field`), `<button type="button">`, `aria-label` on icon-only buttons, touch targets ≥ 44px.
-- Verify UI changes in a real browser (`npm run dev`); the type check does not cover rendering.
+## Local stack facts
+- serverless-offline does not verify JWTs (only decodes); there is no S3 locally, so receipts are disabled in dev auth.
+- `optimizeDeps.esbuildOptions.define.global` in `vite.config.ts` is required: the Cognito lib's `buffer` polyfill reads
+  `global`, which crashed the dev server's pre-bundle (blank page). `test/vite-deps.test.ts` guards it.
+- Not verifiable locally (manual on the deployed `dev` stack, see README): Cognito login/new password, token refresh,
+  receipts, CORS from the real origin.
