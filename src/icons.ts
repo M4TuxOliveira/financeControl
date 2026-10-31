@@ -19,6 +19,10 @@ export const NAV_ICONS: Record<string, string> = {
   plus: 'M12 5v14M5 12h14',
   close: 'M6 6l12 12M18 6L6 18',
   upload: 'M12 16V4M7 9l5-5 5 5M4 20h16',
+  bank: 'M3 10l9-6 9 6M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 20h18',
+  up: 'M12 19V5M6 11l6-6 6 6',
+  down: 'M12 5v14M6 13l6 6 6-6',
+  scale: 'M12 4v16M8 20h8M5 7h14M5 7l-3 6a3 3 0 0 0 6 0zM19 7l-3 6a3 3 0 0 0 6 0z',
 };
 
 export const PALETTE: [string, string][] = [

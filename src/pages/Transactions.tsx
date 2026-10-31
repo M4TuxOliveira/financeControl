@@ -1,5 +1,5 @@
 import { useDeferredValue, useEffect, useMemo, useState } from 'react';
-import type { Account, Card, DeleteScope, Repeat, Tx, TxFilters, TxInput, TxType } from '../api/types';
+import type { Account, Card, DeleteScope, Repeat, Totals, Tx, TxFilters, TxInput, TxType } from '../api/types';
 import { useAuth } from '../auth/AuthProvider';
 import { QueryState } from '../components/QueryState';
 import { amountColor, signedAmount } from '../components/txFormat';
@@ -8,10 +8,10 @@ import { errorMessage } from '../i18n/errors';
 import { shiftMonth } from '../i18n/format';
 import { txTitle } from '../i18n/txTitle';
 import {
-  useAccounts, useCards, useCategories, useCreateTransactions, useDeleteTransaction, useTransactions, useUpdateTransaction, useUploadReceipt,
+  useAccounts, useCards, useCategories, useCreateTransactions, useDeleteTransaction, useOverview, useTransactions, useUpdateTransaction, useUploadReceipt,
 } from '../queries';
 import { useAccountLookup, useCategoryLookup } from '../queries/lookups';
-import { ConfirmDelete, Field, Modal, OptionRadio, PageHead } from '../ui';
+import { ConfirmDelete, Field, Modal, NavIcon, OptionRadio, PageHead } from '../ui';
 
 const TYPES: TxType[] = ['expense', 'income', 'transfer'];
 
@@ -85,15 +85,12 @@ export function Transactions() {
         <input className="flt" aria-label={t('tx.tagFilter')} placeholder={t('tx.tagFilter')} value={tag} onChange={e => setTag(e.target.value)} />
       </div>
 
+      <Summary totals={list.data?.totals} account={account} monthly={!!mon} />
+
       <QueryState q={list} isEmpty={d => d.items.length === 0}
         empty={<>{hasFilters ? t('tx.noMatch') : t('tx.empty')}{!hasFilters && <button type="button" className="btn btn-1" onClick={() => setForm('new')}>{t('tx.addFirst')}</button>}</>}>
-        {({ items, totals }) => (
+        {({ items }) => (
           <>
-            <div className="kpis" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: 12 }}>
-              <div className="card kpi" style={{ padding: 16, gap: 4 }}><span className="lbl">{t('tx.income')}</span><span className="num" style={{ fontSize: 20, color: 'var(--pos)' }}>+ {money(totals.income)}</span></div>
-              <div className="card kpi" style={{ padding: 16, gap: 4 }}><span className="lbl">{t('tx.expenses')}</span><span className="num" style={{ fontSize: 20, color: 'var(--neg)' }}>− {money(totals.expense)}</span></div>
-              <div className="card kpi" style={{ padding: 16, gap: 4 }}><span className="lbl">{t('tx.net')}</span><span className="num" style={{ fontSize: 20 }}>{money(totals.net)}</span></div>
-            </div>
             <section className="card" style={{ padding: '6px 20px 10px' }}>
               <div className="scroll">
                 <div className="trow thead tx-cols">
@@ -130,6 +127,34 @@ export function Transactions() {
       {form && <TxDialog key={form === 'new' ? 'new' : form.id} tx={form === 'new' ? null : form} onClose={() => setForm(null)} />}
       {del && <DeleteTx tx={del} onClose={() => setDel(null)} />}
     </>
+  );
+}
+
+/**
+ * Current balance (the filtered account's, else the total) and the list's income/expense/net, all as the server sends
+ * them. Rendered outside the list's QueryState so an empty month still shows its zeros.
+ */
+function Summary({ totals, account, monthly }: { totals?: Totals; account: string; monthly: boolean }) {
+  const { t, money, today } = useI18n();
+  const ov = useOverview(today.slice(0, 7));
+  const accounts = useAccounts();
+  const filtered = account ? accounts.data?.find(a => a.id === account) : undefined;
+  const balance = filtered ? filtered.balance : ov.data?.totalBalance;
+  const net = totals?.net ?? 0;
+  const items: [string, string, string, number | undefined][] = [
+    ['bank', 'var(--info)', t('tx.currentBalance'), balance],
+    ['up', 'var(--pos)', t('tx.income'), totals?.income],
+    ['down', 'var(--neg)', t('tx.expenses'), totals?.expense],
+    ['scale', net < 0 ? 'var(--neg)' : 'var(--pos)', monthly ? t('tx.monthBalance') : t('tx.balance'), totals?.net],
+  ];
+  return (
+    <div className="kpis">
+      {items.map(([icon, color, label, value]) => (
+        <div className="card kpi sum" key={icon}>
+          <span className="ic" style={{ color }}><NavIcon name={icon} size={22} /></span>
+          <span className="stack"><span className="lbl">{label}</span><span className="num v">{value === undefined ? '—' : money(value)}</span></span>
+        </div>))}
+    </div>
   );
 }
 

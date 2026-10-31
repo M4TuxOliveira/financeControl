@@ -1,20 +1,20 @@
 :root{
   --bg:#F3F4EF;--surface:#FFFFFF;--track:#E6E8E1;--line:#E8EAE3;--line-2:#C9CDD3;
   --ink:#14181F;--ink-2:#3C434D;--muted:#5C6570;--hero:#14181F;--inverse:#14181F;--on-inverse:#FFFFFF;
-  --pos:#0B6B4E;--neg:#B4421A;--warn:#8F5700;--danger:#B42319;--accent:#D8F26A;--btn:#0B6B4E;--btn-h:#084D38;
+  --pos:#0B6B4E;--neg:#B4421A;--warn:#8F5700;--danger:#B42319;--accent:#D8F26A;--btn:#0B6B4E;--btn-h:#084D38;--info:#1F4E79;
   color-scheme:light;
 }
 :root[data-theme="dark"]{
   --bg:#0F1217;--surface:#1A1F26;--track:#2A3039;--line:#262C35;--line-2:#3A414B;
   --ink:#ECEEE8;--ink-2:#C3C8CF;--muted:#9AA1AA;--hero:#232A33;--inverse:#ECEEE8;--on-inverse:#14181F;
-  --pos:#5FC79A;--neg:#FF9E6B;--warn:#F2B14C;--danger:#FF8A80;--btn:#1E8A66;--btn-h:#25A07A;
+  --pos:#5FC79A;--neg:#FF9E6B;--warn:#F2B14C;--danger:#FF8A80;--btn:#1E8A66;--btn-h:#25A07A;--info:#7DB3E8;
   color-scheme:dark;
 }
 @media (prefers-color-scheme: dark){
   :root[data-theme="system"]{
     --bg:#0F1217;--surface:#1A1F26;--track:#2A3039;--line:#262C35;--line-2:#3A414B;
     --ink:#ECEEE8;--ink-2:#C3C8CF;--muted:#9AA1AA;--hero:#232A33;--inverse:#ECEEE8;--on-inverse:#14181F;
-    --pos:#5FC79A;--neg:#FF9E6B;--warn:#F2B14C;--danger:#FF8A80;--btn:#1E8A66;--btn-h:#25A07A;
+    --pos:#5FC79A;--neg:#FF9E6B;--warn:#F2B14C;--danger:#FF8A80;--btn:#1E8A66;--btn-h:#25A07A;--info:#7DB3E8;
     color-scheme:dark;
   }
 }
@@ -56,6 +56,9 @@ h1,h2,h3{font-family:'Space Grotesk',sans-serif;margin:0;font-weight:600}
 .kpi{gap:6px}
 .kpi .lbl{font-size:13px;color:var(--muted)}
 .kpi .v{font-size:24px}
+.sum{flex-direction:row;align-items:center;gap:14px;padding:16px}
+.sum .ic{width:44px;height:44px;flex:none;border-radius:999px;display:flex;align-items:center;justify-content:center;background:color-mix(in srgb,currentColor 16%,transparent)}
+.sum .v{font-size:20px}
 .cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px}
 .empty{padding:28px 12px;text-align:center;color:var(--muted);display:flex;flex-direction:column;align-items:center;gap:12px}
 

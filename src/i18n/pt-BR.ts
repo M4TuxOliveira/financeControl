@@ -301,7 +301,6 @@ export const ptBR: Record<Key, string> = {
   'tx.tagFilter': 'Tag (ex.: #viagem)',
   'tx.income': 'Receitas',
   'tx.expenses': 'Despesas',
-  'tx.net': 'Resultado',
   'tx.empty': 'Nenhuma transação ainda.',
   'tx.noMatch': 'Nenhuma transação corresponde aos filtros.',
   'tx.addFirst': 'Adicione a primeira',
@@ -396,5 +395,8 @@ export const ptBR: Record<Key, string> = {
   'auth.accountNotReady': 'Esta conta ainda não está pronta para entrar. Fale com o administrador.',
   'auth.passwordPolicy': 'Essa senha não atende aos requisitos (pelo menos 10 caracteres com maiúsculas, minúsculas e números).',
   'goals.accountGone': 'A conta vinculada não existe mais; a meta será salva sem conta.',
+  'tx.currentBalance': 'Saldo atual',
+  'tx.monthBalance': 'Balanço mensal',
+  'tx.balance': 'Balanço',
   // @@keys-end
 };

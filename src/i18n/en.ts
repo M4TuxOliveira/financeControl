@@ -313,7 +313,6 @@ export const en = {
   'tx.tagFilter': 'Tag (e.g. #trip)',
   'tx.income': 'Income',
   'tx.expenses': 'Expenses',
-  'tx.net': 'Net',
   'tx.empty': 'No transactions yet.',
   'tx.noMatch': 'No transactions match these filters.',
   'tx.addFirst': 'Add the first one',
@@ -410,6 +409,9 @@ export const en = {
   'auth.accountNotReady': 'This account is not ready to sign in yet. Contact the administrator.',
   'auth.passwordPolicy': 'That password does not meet the requirements (at least 10 characters with upper case, lower case and numbers).',
   'goals.accountGone': 'The linked account no longer exists; this goal will be saved without an account.',
+  'tx.currentBalance': 'Current balance',
+  'tx.monthBalance': 'Monthly balance',
+  'tx.balance': 'Balance',
   // @@keys-end
 } as const;
 

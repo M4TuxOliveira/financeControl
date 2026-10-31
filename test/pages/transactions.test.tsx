@@ -6,7 +6,7 @@ import * as api from '../../src/api/endpoints';
 import * as receipt from '../../src/api/receipt';
 import { Transactions } from '../../src/pages/Transactions';
 import { renderWithProviders } from '../utils';
-import { account, CATS, card, mockApi, tx } from './fixtures';
+import { account, CATS, card, mockApi, overview, tx } from './fixtures';
 
 vi.mock('../../src/api/endpoints');
 vi.mock('../../src/api/receipt');
@@ -17,6 +17,34 @@ const list = (items = [tx(), tx({ id: 't2', type: 'income', amount: 980000, desc
 beforeEach(() => {
   location.hash = '#/transactions';
   mockApi({ listTransactions: list(), listAccounts: [account(), account({ id: 'a2', name: 'Caixinha' })], listCards: [card()] });
+});
+
+describe('Transactions summary', () => {
+  const card_ = (label: string) => screen.getByText(label).closest('.sum') as HTMLElement;
+  it('shows the server total balance and the list totals for the month', async () => {
+    renderWithProviders(<Transactions />);
+    await screen.findByText('iFood');
+    await waitFor(() => expect(within(card_('Saldo atual')).getByText('R$ 18.432,90')).toBeInTheDocument());
+    expect(within(card_('Receitas')).getByText('R$ 9.800,00')).toBeInTheDocument();
+    expect(within(card_('Despesas')).getByText('R$ 86,90')).toBeInTheDocument();
+    expect(within(card_('Balanço mensal')).getByText('R$ 9.713,10')).toBeInTheDocument();
+    expect(api.getOverview).toHaveBeenCalledWith('2026-10');
+  });
+  it('uses the filtered account balance and drops "mensal" for all time', async () => {
+    renderWithProviders(<Transactions />);
+    await screen.findByText('iFood');
+    await userEvent.selectOptions(screen.getByLabelText('Conta'), 'a2');
+    await waitFor(() => expect(within(card_('Saldo atual')).getByText('R$ 7.214,55')).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('button', { name: 'Todo o período' }));
+    expect(await screen.findByText('Balanço')).toBeInTheDocument();
+  });
+  it('keeps the cards on an empty month', async () => {
+    mockApi({ listTransactions: list([]), listAccounts: [account()], listCards: [], getOverview: overview({ totalBalance: -5000 }) });
+    vi.mocked(api.listTransactions).mockResolvedValue({ items: [], totals: { income: 0, expense: 0, net: 0 } });
+    renderWithProviders(<Transactions />);
+    await waitFor(() => expect(within(card_('Saldo atual')).getByText('-R$ 50,00')).toBeInTheDocument());
+    expect(within(card_('Receitas')).getByText('R$ 0,00')).toBeInTheDocument();
+  });
 });
 
 describe('Transactions list', () => {
@@ -32,7 +60,7 @@ describe('Transactions list', () => {
   it('search, month switch and all-time map to query params', async () => {
     renderWithProviders(<Transactions />);
     await screen.findByText('iFood');
-    expect(screen.getAllByText('− R$ 86,90')).toHaveLength(2); // the row and the expenses KPI
+    expect(screen.getByText('− R$ 86,90')).toBeInTheDocument();
     await userEvent.type(screen.getByLabelText('Buscar descrição, tag, observação'), 'ifood');
     await waitFor(() => expect(api.listTransactions).toHaveBeenCalledWith({ month: '2026-10', q: 'ifood' }));
     await userEvent.click(screen.getByRole('button', { name: 'Mês anterior' }));
@@ -43,7 +71,7 @@ describe('Transactions list', () => {
   it('tag filter is normalized to start with #; type and account selects are sent', async () => {
     renderWithProviders(<Transactions />);
     await screen.findByText('iFood');
-    expect(screen.getAllByText('− R$ 86,90')).toHaveLength(2); // the row and the expenses KPI
+    expect(screen.getByText('− R$ 86,90')).toBeInTheDocument();
     await userEvent.type(screen.getByLabelText('Tag (ex.: #viagem)'), 'trip');
     await userEvent.selectOptions(screen.getByLabelText('Tipo'), 'income');
     await userEvent.selectOptions(screen.getByLabelText('Conta'), 'a2');
