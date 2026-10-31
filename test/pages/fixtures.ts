@@ -27,7 +27,7 @@ export const goal = (o: Partial<Goal> = {}): Goal => ({
   id: 'g1', name: 'Viagem', accountId: 'a2', target: 300000, targetDate: '2027-01', saved: 90000, pct: 30, left: 210000, monthsLeft: 3, monthlyNeeded: 70000, ...o,
 });
 export const overview = (o: Partial<Overview> = {}): Overview => ({
-  month: '2026-10', totalBalance: 1843290, income: 980000, expense: 421537, net: 558463, openStatementsTotal: 231844, recent: [], ...o,
+  month: '2026-10', totalBalance: 1843290, income: 980000, expense: 421537, net: 558463, openStatementsTotal: 231844, recent: [], monthEndBalance: 0, monthEndBalances: {}, ...o,
 });
 
 type Fn = keyof typeof api;

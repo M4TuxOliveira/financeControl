@@ -35,6 +35,8 @@ export type Goal = Stamped & {
 };
 export type Overview = {
   month: string; totalBalance: number; income: number; expense: number; net: number; openStatementsTotal: number; recent: Tx[];
+  /** As of the month's last day (closing for a past month, projected for a future one); `totalBalance` is as of today. */
+  monthEndBalance: number; monthEndBalances: Record<string, number>;
 };
 export type Me = { locale: Locale; currency: string; timezone: string };
 export type Totals = { income: number; expense: number; net: number };

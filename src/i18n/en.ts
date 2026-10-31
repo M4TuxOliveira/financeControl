@@ -412,6 +412,8 @@ export const en = {
   'tx.currentBalance': 'Current balance',
   'tx.monthBalance': 'Monthly balance',
   'tx.balance': 'Balance',
+  'tx.monthEndBalance': 'Balance at month end',
+  'tx.projectedBalance': 'Projected balance',
   // @@keys-end
 } as const;
 

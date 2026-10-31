@@ -85,7 +85,7 @@ export function Transactions() {
         <input className="flt" aria-label={t('tx.tagFilter')} placeholder={t('tx.tagFilter')} value={tag} onChange={e => setTag(e.target.value)} />
       </div>
 
-      <Summary totals={list.data?.totals} account={account} monthly={!!mon} />
+      <Summary totals={list.data?.totals} account={account} month={mon} />
 
       <QueryState q={list} isEmpty={d => d.items.length === 0}
         empty={<>{hasFilters ? t('tx.noMatch') : t('tx.empty')}{!hasFilters && <button type="button" className="btn btn-1" onClick={() => setForm('new')}>{t('tx.addFirst')}</button>}</>}>
@@ -131,21 +131,28 @@ export function Transactions() {
 }
 
 /**
- * Current balance (the filtered account's, else the total) and the list's income/expense/net, all as the server sends
- * them. Rendered outside the list's QueryState so an empty month still shows its zeros.
+ * The viewed month's balance (the filtered account's, else the total) and the list's income/expense/net, all as the
+ * server sends them: today's balance for the current month or all time, else the balance on the month's last day
+ * (closing for a past month, projected for a future one). Rendered outside the list's QueryState so an empty month
+ * still shows its zeros.
  */
-function Summary({ totals, account, monthly }: { totals?: Totals; account: string; monthly: boolean }) {
+function Summary({ totals, account, month }: { totals?: Totals; account: string; month: string }) {
   const { t, money, today } = useI18n();
-  const ov = useOverview(today.slice(0, 7));
+  const current = today.slice(0, 7);
+  const ov = useOverview(month || current);
   const accounts = useAccounts();
   const filtered = account ? accounts.data?.find(a => a.id === account) : undefined;
-  const balance = filtered ? filtered.balance : ov.data?.totalBalance;
+  const now = !month || month === current;
+  const balance = now
+    ? (filtered ? filtered.balance : ov.data?.totalBalance)
+    : (filtered ? ov.data?.monthEndBalances[filtered.id] : ov.data?.monthEndBalance);
+  const balanceLabel = now ? t('tx.currentBalance') : month < current ? t('tx.monthEndBalance') : t('tx.projectedBalance');
   const net = totals?.net ?? 0;
   const items: [string, string, string, number | undefined][] = [
-    ['bank', 'var(--info)', t('tx.currentBalance'), balance],
+    ['bank', 'var(--info)', balanceLabel, balance],
     ['up', 'var(--pos)', t('tx.income'), totals?.income],
     ['down', 'var(--neg)', t('tx.expenses'), totals?.expense],
-    ['scale', net < 0 ? 'var(--neg)' : 'var(--pos)', monthly ? t('tx.monthBalance') : t('tx.balance'), totals?.net],
+    ['scale', net < 0 ? 'var(--neg)' : 'var(--pos)', month ? t('tx.monthBalance') : t('tx.balance'), totals?.net],
   ];
   return (
     <div className="kpis">

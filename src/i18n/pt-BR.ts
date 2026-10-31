@@ -398,5 +398,7 @@ export const ptBR: Record<Key, string> = {
   'tx.currentBalance': 'Saldo atual',
   'tx.monthBalance': 'Balanço mensal',
   'tx.balance': 'Balanço',
+  'tx.monthEndBalance': 'Saldo no fim do mês',
+  'tx.projectedBalance': 'Saldo previsto',
   // @@keys-end
 };

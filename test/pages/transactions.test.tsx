@@ -38,6 +38,26 @@ describe('Transactions summary', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Todo o período' }));
     expect(await screen.findByText('Balanço')).toBeInTheDocument();
   });
+  it('a past month shows its closing balance and a future month its projection, total or per account', async () => {
+    vi.mocked(api.getOverview).mockImplementation(async m => overview({
+      month: m, monthEndBalance: m === '2026-09' ? 111100 : 999900, monthEndBalances: { a2: m === '2026-09' ? 2200 : 3300 },
+    }));
+    renderWithProviders(<Transactions />);
+    await screen.findByText('iFood');
+    await userEvent.click(screen.getByRole('button', { name: 'Mês anterior' }));
+    await waitFor(() => expect(within(card_('Saldo no fim do mês')).getByText('R$ 1.111,00')).toBeInTheDocument());
+    expect(screen.queryByText('Saldo atual')).not.toBeInTheDocument();
+    expect(api.getOverview).toHaveBeenCalledWith('2026-09');
+    await userEvent.selectOptions(screen.getByLabelText('Conta'), 'a2');
+    await waitFor(() => expect(within(card_('Saldo no fim do mês')).getByText('R$ 22,00')).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('button', { name: 'Próximo mês' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Próximo mês' }));
+    await waitFor(() => expect(within(card_('Saldo previsto')).getByText('R$ 33,00')).toBeInTheDocument());
+    await userEvent.selectOptions(screen.getByLabelText('Conta'), '');
+    await waitFor(() => expect(within(card_('Saldo previsto')).getByText('R$ 9.999,00')).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('button', { name: 'Todo o período' }));
+    await waitFor(() => expect(within(card_('Saldo atual')).getByText('R$ 18.432,90')).toBeInTheDocument());
+  });
   it('keeps the cards on an empty month', async () => {
     mockApi({ listTransactions: list([]), listAccounts: [account()], listCards: [], getOverview: overview({ totalBalance: -5000 }) });
     vi.mocked(api.listTransactions).mockResolvedValue({ items: [], totals: { income: 0, expense: 0, net: 0 } });

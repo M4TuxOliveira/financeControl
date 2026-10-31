@@ -29,7 +29,7 @@ describe('queries', () => {
   });
   it('useBudgets / useOverview pass the month', async () => {
     vi.mocked(api.listBudgets).mockResolvedValue([]);
-    vi.mocked(api.getOverview).mockResolvedValue({ month: '2026-10', totalBalance: 0, income: 0, expense: 0, net: 0, openStatementsTotal: 0, recent: [] });
+    vi.mocked(api.getOverview).mockResolvedValue({ month: '2026-10', totalBalance: 0, income: 0, expense: 0, net: 0, openStatementsTotal: 0, recent: [], monthEndBalance: 0, monthEndBalances: {} });
     const { wrapper } = setup();
     renderHook(() => q.useBudgets('2026-10'), { wrapper });
     renderHook(() => q.useOverview('2026-10'), { wrapper });
